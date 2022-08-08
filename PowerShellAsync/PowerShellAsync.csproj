@@ -1,7 +1,7 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>TTRider.PowerShellAsync</AssemblyName>
     <Version>1.1.0.1</Version>
     <Company>TTRider, L.L.C.</Company>
@@ -33,6 +33,6 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.Management.Automation" Version="7.0.0" />
+    <PackageReference Include="System.Management.Automation" Version="7.2.5" />
   </ItemGroup>
 </Project>
