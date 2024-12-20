@@ -5,40 +5,39 @@ using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using TTRider.PowerShellAsync.UnitTests.Infrastructure;
 
 namespace TTRider.PowerShellAsync.UnitTests
 {
-    [TestClass]
+    [TestFixture]
     public class TestPsBase
     {
-        private static Runspace runspace;
+        private static Runspace? runspace;
 
-        [ClassInitialize()]
-        public static void Initialize(TestContext context)
+        [SetUp()]
+        public static void SetUp()
         {
             runspace = RunspaceFactory.CreateRunspace();
             runspace.Open();
             ImportModule();
         }
 
-        [ClassCleanup()]
-        public static void ClassCleanup()
+        [TearDown()]
+        public static void TearDown()
         {
-            runspace.Close();
+            runspace!.Close();
         }
 
         public static void ImportModule()
         {
             RunCommand(ps =>
             {
-                var path = new Uri(typeof(TestWriteObject).Assembly.CodeBase);
+                var path = new Uri(typeof(TestWriteObject).Assembly.Location);
                 ps.AddCommand("Import-Module").AddArgument(path.LocalPath);
             });
         }
 
-        public static List<PSObject> RunCommand(Action<PowerShell> prepareAction, PsCommandContext context = null)
+        public static List<PSObject> RunCommand(Action<PowerShell> prepareAction, PsCommandContext? context = null)
         {
             var ps = PowerShell.Create();
             ps.Runspace = runspace;
@@ -47,8 +46,7 @@ namespace TTRider.PowerShellAsync.UnitTests
 
             var ret = new List<PSObject>();
 
-            var settings = new PSInvocationSettings
-            {
+            var settings = new PSInvocationSettings {
                 Host = new TestPsHost(context ?? new PsCommandContext())
             };
 
@@ -60,30 +58,28 @@ namespace TTRider.PowerShellAsync.UnitTests
             return ret;
         }
 
-        [TestMethod]
+        [Test]
         public void WriteObject()
         {
             var output = RunCommand(ps => ps.AddCommand("Test-TTRiderPSAWriteObject"));
-            Assert.AreEqual("WriteObject00\r\nWriteObject01\r\nWriteObject02\r\nWriteObject03",
-                string.Join("\r\n", output));
+            Assert.That(string.Join("\r\n", output), Is.EqualTo("WriteObject00\r\nWriteObject01\r\nWriteObject02\r\nWriteObject03"));
         }
 
-        [TestMethod]
+        [Test]
         public void PropertyAccess()
         {
             var output = RunCommand(ps => ps.AddCommand("Test-TTRiderPSAPropertyAccess"));
-            Assert.AreEqual(0, output.Count);
+            Assert.That(output.Count, Is.EqualTo(0));
         }
 
-        [TestMethod]
+        [Test]
         public void SyncProcessing()
         {
             var output = RunCommand(ps => ps.AddCommand("Test-TTRiderPSASyncProcessing"));
-            Assert.AreEqual("BeginProcessingAsync\r\nProcessRecordAsync\r\nEndProcessingAsync",
-                string.Join("\r\n", output));
+            Assert.That(string.Join("\r\n", output), Is.EqualTo("BeginProcessingAsync\r\nProcessRecordAsync\r\nEndProcessingAsync"));
         }
 
-        [TestMethod]
+        [Test]
         public void WriteAll()
         {
             var context = new PsCommandContext();
@@ -94,35 +90,30 @@ namespace TTRider.PowerShellAsync.UnitTests
                 ps.AddParameter("Debug");
             }, context);
 
-            Assert.AreEqual("WriteObject00\r\nWriteObject01\r\nWriteObject02\r\nWriteObject03",
-               string.Join("\r\n", output));
+            Assert.That(string.Join("\r\n", output), Is.EqualTo("WriteObject00\r\nWriteObject01\r\nWriteObject02\r\nWriteObject03"));
 
-            Assert.AreEqual("WriteDebug",
-                string.Join("\r\n", context.DebugLines));
+            Assert.That(string.Join("\r\n", context.DebugLines), Is.EqualTo("WriteDebug"));
 
+            Assert.That(string.Join("\r\n", context.WarningLines), Is.EqualTo("WriteWarning"));
 
-            Assert.AreEqual("WriteWarning",
-               string.Join("\r\n", context.WarningLines));
+            Assert.That(string.Join("\r\n", context.VerboseLines), Is.EqualTo("WriteVerbose"));
 
-            Assert.AreEqual("WriteVerbose",
-               string.Join("\r\n", context.VerboseLines));
-
-            Assert.AreEqual(1, context.ProgressRecords.Count);
+            Assert.That(context.ProgressRecords.Count, Is.EqualTo(1));
 
         }
 
-        [TestMethod]
+        [Test]
         public void SynchronizationContext()
         {
             var context = new PsCommandContext();
             var output = RunCommand(ps => ps.AddCommand("Test-TTRiderPSSynchronisationContext"), context);
 
-            Assert.AreEqual(2, output.Count);
+            Assert.That(output.Count, Is.EqualTo(2));
 
             var initialProcessId = output[0];
             var finalProcessId = output[1];
 
-            Assert.AreEqual(initialProcessId.ToString(), finalProcessId.ToString());
+            Assert.That(finalProcessId.ToString(), Is.EqualTo(initialProcessId.ToString()));
         }
     }
 
@@ -201,8 +192,6 @@ namespace TTRider.PowerShellAsync.UnitTests
     }
 
 
-
-
     [Cmdlet("Test", "TTRiderPSAWriteAll")]
     public class TestWriteAll : AsyncCmdlet
     {
@@ -221,6 +210,7 @@ namespace TTRider.PowerShellAsync.UnitTests
             });
         }
     }
+
 
     [Cmdlet("Test", "TTRiderPSSynchronisationContext")]
     public class TestSynchronisationContext : AsyncCmdlet

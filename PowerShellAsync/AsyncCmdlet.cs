@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Management.Automation;
 using System.Threading;
 using System.Threading.Tasks;
-//using JetBrains.Annotations;
 
 namespace TTRider.PowerShellAsync
 {
@@ -173,8 +172,8 @@ namespace TTRider.PowerShellAsync
 
         private class AsyncCmdletSynchronizationContext : SynchronizationContext, IDisposable
         {
-            private BlockingCollection<MarshalItem> workItems;
-            private static AsyncCmdletSynchronizationContext currentAsyncCmdletContext;
+            private BlockingCollection<MarshalItem>? workItems;
+            private static AsyncCmdletSynchronizationContext? currentAsyncCmdletContext;
 
             private AsyncCmdletSynchronizationContext(int boundedCapacity)
             {
@@ -214,7 +213,7 @@ namespace TTRider.PowerShellAsync
 
             internal static void PostItem(MarshalItem item)
             {
-                currentAsyncCmdletContext.Post(item);
+                currentAsyncCmdletContext!.Post(item);
             }
 
             public void Dispose()
@@ -238,13 +237,13 @@ namespace TTRider.PowerShellAsync
             {
                 EnsureNotDisposed();
 
-                this.workItems.CompleteAdding();
+                this.workItems!.CompleteAdding();
             }
 
             private void ProcessQueue()
             {
                 MarshalItem workItem;
-                while (this.workItems.TryTake(out workItem, Timeout.Infinite))
+                while (this.workItems!.TryTake(out workItem, Timeout.Infinite))
                 {
                     workItem.Invoke();
                 }
@@ -264,7 +263,7 @@ namespace TTRider.PowerShellAsync
             {
                 EnsureNotDisposed();
 
-                this.workItems.Add(item);
+                this.workItems!.Add(item);
             }
         }
 

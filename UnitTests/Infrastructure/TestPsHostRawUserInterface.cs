@@ -58,6 +58,6 @@ namespace TTRider.PowerShellAsync.UnitTests.Infrastructure
             get { throw new NotImplementedException(); }
         }
 
-        public override string WindowTitle { get; set; }
+        public override string? WindowTitle { get; set; }
     }
 }
