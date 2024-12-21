@@ -15,6 +15,7 @@
 		<IsTestProject>true</IsTestProject>
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
+	
 	<ItemGroup>
 		<ProjectReference Include="..\PowerShellAsync\PowerShellAsync.csproj" />
 	</ItemGroup>

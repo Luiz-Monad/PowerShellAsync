@@ -1,10 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web.Services.Description;
+using NUnit.Framework.Interfaces;
+using TTRider.PowerShellAsync;
 using TTRider.PowerShellAsync.UnitTests.Infrastructure;
 
 namespace TTRider.PowerShellAsync.UnitTests
@@ -28,7 +33,7 @@ namespace TTRider.PowerShellAsync.UnitTests
             runspace!.Close();
         }
 
-        public static void ImportModule()
+        private static void ImportModule()
         {
             RunCommand(ps =>
             {
@@ -37,46 +42,51 @@ namespace TTRider.PowerShellAsync.UnitTests
             });
         }
 
-        public static List<PSObject> RunCommand(Action<PowerShell> prepareAction, PsCommandContext? context = null)
+        private static (List<string> result, PowerShell powershell) RunCommand(Action<PowerShell> prepareAction, PsCommandContext? context = null)
         {
             var ps = PowerShell.Create();
             ps.Runspace = runspace;
 
             prepareAction(ps);
 
-            var ret = new List<PSObject>();
+            var ret = new List<string>();
 
             var settings = new PSInvocationSettings {
                 Host = new TestPsHost(context ?? new PsCommandContext())
             };
 
-            foreach (var result in ps.Invoke(new Object[0], settings))
+            foreach (var result in ps.Invoke(Array.Empty<object>(), settings))
             {
                 Trace.WriteLine(result);
-                ret.Add(result);
+                ret.Add(result.ToString());
             }
-            return ret;
+
+            return (ret, ps);
         }
 
         [Test]
         public void WriteObject()
         {
-            var output = RunCommand(ps => ps.AddCommand("Test-TTRiderPSAWriteObject"));
-            Assert.That(string.Join("\r\n", output), Is.EqualTo("WriteObject00\r\nWriteObject01\r\nWriteObject02\r\nWriteObject03"));
+            var output = RunCommand(ps => ps.AddCommand("Test-WriteObject"));
+            Assert.That(output.result, Is.EquivalentTo(TestData.Objects));
         }
 
         [Test]
         public void PropertyAccess()
         {
-            var output = RunCommand(ps => ps.AddCommand("Test-TTRiderPSAPropertyAccess"));
-            Assert.That(output.Count, Is.EqualTo(0));
+            var output = RunCommand(ps => ps.AddCommand("Test-PropertyAccess"));
+            Assert.That(output.result.Count, Is.EqualTo(0));
         }
 
         [Test]
         public void SyncProcessing()
         {
-            var output = RunCommand(ps => ps.AddCommand("Test-TTRiderPSASyncProcessing"));
-            Assert.That(string.Join("\r\n", output), Is.EqualTo("BeginProcessingAsync\r\nProcessRecordAsync\r\nEndProcessingAsync"));
+            var output = RunCommand(ps =>
+            {
+                ps.AddCommand("Get-Date");
+                ps.AddCommand("Test-SyncProcessing");
+            });
+            Assert.That(output.result, Is.EquivalentTo(TestData.Processing.Objects));
         }
 
         [Test]
@@ -85,20 +95,28 @@ namespace TTRider.PowerShellAsync.UnitTests
             var context = new PsCommandContext();
             var output = RunCommand(ps =>
             {
-                ps.AddCommand("Test-TTRiderPSAWriteAll");
+                ps.AddCommand("Test-WriteAll");
                 ps.AddParameter("Verbose");
                 ps.AddParameter("Debug");
             }, context);
 
-            Assert.That(string.Join("\r\n", output), Is.EqualTo("WriteObject00\r\nWriteObject01\r\nWriteObject02\r\nWriteObject03"));
+            Assert.That(output.result, Is.EquivalentTo(TestData.Objects));
 
-            Assert.That(string.Join("\r\n", context.DebugLines), Is.EqualTo("WriteDebug"));
+            Assert.That(context.Lines, Is.Empty); // without out-default results don't go to the console
+            Assert.That(context.DebugLines, Has.One.EqualTo(TestData.Debug));
+            Assert.That(context.WarningLines, Has.One.EqualTo(TestData.Warning));
+            Assert.That(context.VerboseLines, Has.One.EqualTo(TestData.Verbose));
 
-            Assert.That(string.Join("\r\n", context.WarningLines), Is.EqualTo("WriteWarning"));
+            Assert.That(context.ErrorLines, Is.Empty); // without out-default errors don't go to the console
+            Assert.That(context.ProgressRecords, Has.One.EqualTo(TestData.ProgressRecord));
 
-            Assert.That(string.Join("\r\n", context.VerboseLines), Is.EqualTo("WriteVerbose"));
+            Predicate<object> stringMatcher(object o) => (object o2) => o.ToString() == o2.ToString();
 
-            Assert.That(context.ProgressRecords.Count, Is.EqualTo(1));
+            Assert.That(output.powershell.Streams.Error, Has.One.Matches(stringMatcher(TestData.ErrorRecord)));
+            Assert.That(output.powershell.Streams.Debug, Has.One.Matches(stringMatcher(TestData.DebugRecord)));
+            Assert.That(output.powershell.Streams.Progress, Has.One.Matches(stringMatcher(TestData.ProgressRecord)));
+            Assert.That(output.powershell.Streams.Warning, Has.One.Matches(stringMatcher(TestData.WarningRecord)));
+            Assert.That(output.powershell.Streams.Information, Has.One.Matches(stringMatcher(TestData.InformationRecord)));
 
         }
 
@@ -106,7 +124,7 @@ namespace TTRider.PowerShellAsync.UnitTests
         public void SynchronizationContext()
         {
             var context = new PsCommandContext();
-            var output = RunCommand(ps => ps.AddCommand("Test-TTRiderPSSynchronisationContext"), context);
+            var output = RunCommand(ps => ps.AddCommand("Test-SynchronisationContext"), context).result;
 
             Assert.That(output.Count, Is.EqualTo(2));
 
@@ -115,25 +133,45 @@ namespace TTRider.PowerShellAsync.UnitTests
 
             Assert.That(finalProcessId.ToString(), Is.EqualTo(initialProcessId.ToString()));
         }
+
+        [Test]
+        public void Cancellation()
+        {
+            var context = new PsCommandContext();
+            var output = RunCommand(ps => ps.AddCommand("Test-Cancellation"), context);
+            output.powershell.Stop();
+
+            Assert.That(context.ErrorLines.Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Switches()
+        {
+            var context = new PsCommandContext();
+            var output = RunCommand(ps => ps.AddCommand("Test-Switches"), context);
+            output.powershell.Stop();
+
+            Assert.That(output.result, Has.One.EqualTo(TestData.ShouldProcessSwitch));
+        }
+
     }
 
-
-
-    [Cmdlet("Test", "TTRiderPSAWriteObject")]
+    [Cmdlet("Test", "WriteObject")]
     public class TestWriteObject : AsyncCmdlet
     {
+
         protected override Task ProcessRecordAsync()
         {
             return Task.Run(() =>
             {
-                this.WriteObject("WriteObject00");
-                this.WriteObject(new[] { "WriteObject01", "WriteObject02", "WriteObject03" }, true);
+                this.WriteObject(TestData.Objects[0]);
+                this.WriteObject(TestData.Objects.Skip(1).ToArray(), true);
             });
         }
     }
 
 
-    [Cmdlet("Test", "TTRiderPSAPropertyAccess")]
+    [Cmdlet("Test", "PropertyAccess")]
     public class TestPropertyAccess : AsyncCmdlet
     {
         protected override Task ProcessRecordAsync()
@@ -163,56 +201,57 @@ namespace TTRider.PowerShellAsync.UnitTests
     }
 
 
-    [Cmdlet("Test", "TTRiderPSASyncProcessing")]
+    [Cmdlet("Test", "SyncProcessing")]
     public class TestSyncProcessing : AsyncCmdlet
     {
         protected override Task BeginProcessingAsync()
         {
-            this.WriteObject("BeginProcessingAsync");
+            this.WriteObject(TestData.Processing.Begin);
             return base.BeginProcessingAsync();
         }
 
         protected override Task EndProcessingAsync()
         {
-            this.WriteObject("EndProcessingAsync");
+            this.WriteObject(TestData.Processing.End);
             return base.EndProcessingAsync();
         }
 
         protected override Task StopProcessingAsync()
         {
-            this.WriteObject("StopProcessingAsync");
+            this.WriteObject(TestData.Processing.Stop);
             return base.StopProcessingAsync();
         }
 
         protected override Task ProcessRecordAsync()
         {
-            this.WriteObject("ProcessRecordAsync");
+            this.WriteObject(TestData.Processing.Record);
             return base.ProcessRecordAsync();
         }
     }
 
 
-    [Cmdlet("Test", "TTRiderPSAWriteAll")]
+    [Cmdlet("Test", "WriteAll")]
     public class TestWriteAll : AsyncCmdlet
     {
         protected override Task ProcessRecordAsync()
         {
             return Task.Run(() =>
             {
-                this.WriteCommandDetail("WriteCommandDetail");
-                this.WriteDebug("WriteDebug");
-                this.WriteError(new ErrorRecord(new Exception(), "errorId", ErrorCategory.SyntaxError, "targetObject"));
-                this.WriteObject("WriteObject00");
-                this.WriteObject(new[] { "WriteObject01", "WriteObject02", "WriteObject03" }, true);
-                this.WriteProgress(new ProgressRecord(0, "activity", "statusDescription"));
-                this.WriteVerbose("WriteVerbose");
-                this.WriteWarning("WriteWarning");
+                this.WriteCommandDetail(TestData.CommandDetail);
+                this.WriteDebug(TestData.Debug);
+                this.WriteError(TestData.ErrorRecord);
+                this.WriteObject(TestData.Objects[0]);
+                this.WriteObject(TestData.Objects.Skip(1).ToArray(), true);
+                this.WriteProgress(TestData.ProgressRecord);
+                this.WriteVerbose(TestData.Verbose);
+                this.WriteWarning(TestData.Warning);
+                this.WriteInformation(TestData.InformationRecord);
             });
         }
     }
 
 
-    [Cmdlet("Test", "TTRiderPSSynchronisationContext")]
+    [Cmdlet("Test", "SynchronisationContext")]
     public class TestSynchronisationContext : AsyncCmdlet
     {
         protected override async Task ProcessRecordAsync()
@@ -224,4 +263,52 @@ namespace TTRider.PowerShellAsync.UnitTests
             this.WriteObject(Thread.CurrentThread.ManagedThreadId);
         }
     }
+
+
+    [Cmdlet("Test", "Cancellation")]
+    public class TestCancellation : AsyncCmdlet
+    {
+        protected override async Task ProcessRecordAsync()
+        {
+            await Task.Delay(TimeSpan.MaxValue);
+        }
+    }
+
+    [Cmdlet("Test", "Switches")]
+    public class TestSwitches : AsyncCmdlet
+    {
+        protected override async Task ProcessRecordAsync()
+        {
+            if (this.ShouldProcess(TestData.ShouldProcessSwitch)) {
+                this.WriteObject(TestData.ShouldProcessSwitch);
+            }
+        }
+    }
+
+    public class TestData
+    {
+        public class Processing
+        {
+            public static readonly string Begin = "BeginProcessingAsync";
+            public static readonly string End = "EndProcessingAsync";
+            public static readonly string Stop = "StopProcessingAsync";
+            public static readonly string Record = "ProcessRecordAsync";
+            public static readonly string[] Objects = [Begin, Record, End];
+        }
+
+        public static readonly string CommandDetail = "WriteCommandDetail";
+        public static readonly string Debug = "WriteDebug";
+        public static readonly string Verbose = "WriteVerbose";
+        public static readonly string Warning = "WriteWarning";
+        public static readonly string[] Objects = ["WriteObject00", "WriteObject01", "WriteObject02", "WriteObject03"];
+
+        public static readonly ErrorRecord ErrorRecord = new(new Exception(), "errorId", ErrorCategory.SyntaxError, "targetObject");
+        public static readonly ProgressRecord ProgressRecord = new(0, "activity", "statusDescription");
+        public static readonly DebugRecord DebugRecord = new(Debug);
+        public static readonly WarningRecord WarningRecord = new(Warning);
+        public static readonly InformationRecord InformationRecord = new("messageData", "source");
+
+        public static readonly string ShouldProcessSwitch = "ShouldProcessSwitch";
+    }
+
 }
