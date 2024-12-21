@@ -3,13 +3,15 @@
   <metadata>
     <id>TTRider.PowerShellAsync.dll</id>
     <version>1.1.0.1</version>
-    <authors>TTRider,tjrockefeller,pgrefviau,tig</authors>
+    <authors>TTRider,tjrockefeller,pgrefviau,tig,luiz-monad</authors>
     <owners>TTRider</owners>
     <licenseUrl>https://github.com/ttrider/powershellasync/blob/master/LICENSE</licenseUrl>
     <projectUrl>https://github.com/ttrider/powershellasync</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Base class for async-supported PowerShell cmdlets.</description>
     <releaseNotes>
+      2.0.0.0
+      * upgraded synchonization context
       1.1.0.1
       * Fixed CI workflow
       1.1.0.0
