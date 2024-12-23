@@ -279,7 +279,9 @@ namespace TTRider.PowerShellAsync.UnitTests
     {
         protected override async Task ProcessRecordAsync()
         {
-            if (this.ShouldProcess(TestData.ShouldProcessSwitch)) {
+            if (this.ShouldProcess(TestData.ShouldProcessSwitch))
+            {
+                await Task.Delay(1);
                 this.WriteObject(TestData.ShouldProcessSwitch);
             }
         }
