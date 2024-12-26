@@ -19,18 +19,11 @@ namespace TTRider.PowerShellAsync.UnitTests
     {
         private static Runspace? runspace;
 
-        [SetUp()]
-        public static void SetUp()
+        static TestPsBase()
         {
             runspace = RunspaceFactory.CreateRunspace();
             runspace.Open();
             ImportModule();
-        }
-
-        [TearDown()]
-        public static void TearDown()
-        {
-            runspace!.Close();
         }
 
         private static void ImportModule()
@@ -162,9 +155,9 @@ namespace TTRider.PowerShellAsync.UnitTests
 
         protected override Task ProcessRecordAsync()
         {
+            this.WriteObject(TestData.Objects[0]);
             return Task.Run(() =>
             {
-                this.WriteObject(TestData.Objects[0]);
                 this.WriteObject(TestData.Objects.Skip(1).ToArray(), true);
             });
         }
@@ -204,6 +197,9 @@ namespace TTRider.PowerShellAsync.UnitTests
     [Cmdlet("Test", "SyncProcessing")]
     public class TestSyncProcessing : AsyncCmdlet
     {
+        [Parameter(ValueFromPipeline = true, Mandatory = true)]
+        public object? Item{ get; set; }
+
         protected override Task BeginProcessingAsync()
         {
             this.WriteObject(TestData.Processing.Begin);

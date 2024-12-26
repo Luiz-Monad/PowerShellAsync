@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Management.Automation;
 using System.Runtime.ExceptionServices;
 using System.Threading;
@@ -16,10 +15,17 @@ namespace TTRider.PowerShellAsync
     /// </remarks>
     public abstract class AsyncCmdlet : PSCmdlet
     {
+        private static readonly TimeSpan CancellationTimeout = TimeSpan.FromMicroseconds(250);
+
         /// <summary>
         ///	The source for cancellation tokens that can be used to cancel the operation.
         /// </summary>
-        readonly CancellationTokenSource _cancellationSource = new CancellationTokenSource();
+        readonly CancellationTokenSource _cancellationSource = new();
+
+        /// <summary>
+        ///	The synchronisation context to run all async tasks on a single thread, the powershell thread.
+        /// </summary>
+        readonly ThreadAffinitiveSynchronizationContext _syncContext = new();
 
         #region Construction and Destruction
 
@@ -71,7 +77,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         protected sealed override void BeginProcessing()
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(BeginProcessingAsync);
+            this._syncContext.SendAsync(BeginProcessingAsync);
         }
 
         /// <summary>
@@ -80,7 +86,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         protected sealed override void ProcessRecord()
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(ProcessRecordAsync);
+            this._syncContext.SendAsync(ProcessRecordAsync);
         }
 
         /// <summary>
@@ -89,7 +95,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         protected sealed override void EndProcessing()
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(EndProcessingAsync);
+            this._syncContext.SendAsync(EndProcessingAsync);
         }
 
         /// <summary>
@@ -99,7 +105,8 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         protected sealed override void StopProcessing()
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(StopProcessingAsync);
+            this._syncContext.SendAsync(StopProcessingAsync, CancellationTimeout);
+            this._cancellationSource.Cancel();
         }
 
         #endregion Sealed Overrides
@@ -112,7 +119,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteDebug(string text)
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => base.WriteDebug(text));
+            this._syncContext.Post(() => base.WriteDebug(text));
         }
 
         /// <summary>
@@ -121,7 +128,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteError(ErrorRecord errorRecord)
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => base.WriteError(errorRecord));
+            this._syncContext.Post(() => base.WriteError(errorRecord));
         }
 
         /// <summary>
@@ -130,7 +137,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteObject(object sendToPipeline)
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => base.WriteObject(sendToPipeline));
+            this._syncContext.Post(() => base.WriteObject(sendToPipeline));
         }
 
         /// <summary>
@@ -139,7 +146,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteObject(object sendToPipeline, bool enumerateCollection)
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => base.WriteObject(sendToPipeline, enumerateCollection));
+            this._syncContext.Post(() => base.WriteObject(sendToPipeline, enumerateCollection));
         }
 
         /// <summary>
@@ -149,7 +156,7 @@ namespace TTRider.PowerShellAsync
         /// <param name="progressRecord">Progress information.</param>
         public new void WriteProgress(ProgressRecord progressRecord)
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => base.WriteProgress(progressRecord));
+            this._syncContext.Post(() => base.WriteProgress(progressRecord));
         }
 
         /// <summary>
@@ -158,7 +165,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteVerbose(string text)
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => base.WriteVerbose(text));
+            this._syncContext.Post(() => base.WriteVerbose(text));
         }
 
         /// <summary>
@@ -167,7 +174,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteWarning(string text)
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => base.WriteWarning(text));
+            this._syncContext.Post(() => base.WriteWarning(text));
         }
 
         /// <summary>
@@ -176,7 +183,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteCommandDetail(string text)
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => base.WriteCommandDetail(text));
+            this._syncContext.Post(() => base.WriteCommandDetail(text));
         }
 
         /// <summary>
@@ -185,7 +192,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void ThrowTerminatingError(ErrorRecord errorRecord)
         {
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => base.ThrowTerminatingError(errorRecord));
+            this._syncContext.Post(() => base.ThrowTerminatingError(errorRecord));
         }
 
         #endregion Intercepted Methods
@@ -198,9 +205,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new bool ShouldProcess(string target)
         {
-            var workItem = Task.Run(() => base.ShouldProcess(target));
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => workItem);
-            return workItem.Result;
+            return this._syncContext.Send(() => base.ShouldProcess(target));
         }
 
         /// <summary>
@@ -209,9 +214,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new bool ShouldProcess(string target, string action)
         {
-            var workItem = Task.Run(() => base.ShouldProcess(target, action));
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => workItem);
-            return workItem.Result;
+            return this._syncContext.Send(() => base.ShouldProcess(target, action));
         }
 
         /// <summary>
@@ -220,9 +223,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new bool ShouldProcess(string verboseDescription, string verboseWarning, string caption)
         {
-            var workItem = Task.Run(() => base.ShouldProcess(verboseDescription, verboseWarning, caption));
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => workItem);
-            return workItem.Result;
+            return this._syncContext.Send(() => base.ShouldProcess(verboseDescription, verboseWarning, caption));
         }
 
         /// <summary>
@@ -232,14 +233,13 @@ namespace TTRider.PowerShellAsync
         public new bool ShouldProcess(string verboseDescription, string verboseWarning, string caption,
             out ShouldProcessReason shouldProcessReason)
         {
-            var workItem = Task.Run(() =>
+            var result = this._syncContext.Send(() =>
             {
                 var result = base.ShouldProcess(verboseDescription, verboseWarning, caption, out var reason);
                 return (result, reason);
             });
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => workItem);
-            shouldProcessReason = workItem.Result.reason;
-            return workItem.Result.result;
+            shouldProcessReason = result.reason;
+            return result.result;
         }
 
         /// <summary>
@@ -248,9 +248,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new bool ShouldContinue(string query, string caption)
         {
-            var workItem = Task.Run(() => base.ShouldContinue(query, caption));
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => workItem);
-            return workItem.Result;
+            return this._syncContext.Send(() => base.ShouldContinue(query, caption));
         }
 
         /// <summary>
@@ -261,15 +259,14 @@ namespace TTRider.PowerShellAsync
         {
             var _yesToAll = yesToAll;
             var _noToAll = noToAll;
-            var workItem = Task.Run(() =>
+            var result = this._syncContext.Send(() =>
             {
                 var result = base.ShouldContinue(query, caption, ref _yesToAll, ref _noToAll);
                 return (result, _yesToAll, _noToAll);
             });
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => workItem);
-            yesToAll = workItem.Result._yesToAll;
-            noToAll = workItem.Result._noToAll;
-            return workItem.Result.result;
+            yesToAll = result._yesToAll;
+            noToAll = result._noToAll;
+            return result.result;
         }
 
         /// <summary>
@@ -278,9 +275,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new bool TransactionAvailable()
         {
-            var workItem = Task.Run(() => base.TransactionAvailable());
-            ThreadAffinitiveSynchronizationContext.RunSynchronized(() => workItem);
-            return workItem.Result;
+            return this._syncContext.Send(() => base.TransactionAvailable());
         }
 
         #endregion Intercepted Functions with reentrancy
@@ -431,64 +426,72 @@ namespace TTRider.PowerShellAsync
         #endregion Async Processing Methods
 
         /// <summary>
-        ///		A synchronisation context that runs all calls scheduled on it (via <see cref="SynchronizationContext.Post"/>) on a single thread.
+        ///	A synchronisation context that runs all calls scheduled on it (via <see cref="SynchronizationContext.Post"/>) on a single thread.
         /// </summary>
         /// <remarks>
-        ///		With thanks to Stephen Toub.
+        ///	With thanks to Stephen Toub.
         /// </remarks>
         public sealed class ThreadAffinitiveSynchronizationContext
             : SynchronizationContext, IDisposable
         {
             /// <summary>
-            ///		A blocking collection (effectively a queue) of work items to execute, consisting of callback delegates and their callback state (if any).
+            ///	A blocking collection (effectively a queue) of work items to execute, consisting of callback delegates and their callback state (if any).
             /// </summary>
-            BlockingCollection<KeyValuePair<SendOrPostCallback, object>> _workItemQueue = new BlockingCollection<KeyValuePair<SendOrPostCallback, object>>();
+            BlockingCollection<(SendOrPostCallback? callback, object? callbackState)>? _workItemQueue;
 
 
             /// <summary>
-            ///		Create a new thread-affinitive synchronisation context.
+            ///	Create a new thread-affinitive synchronisation context.
             /// </summary>
-            ThreadAffinitiveSynchronizationContext()
+            public ThreadAffinitiveSynchronizationContext()
             {
             }
 
 
             /// <summary>
-            ///		Dispose of resources being used by the synchronisation context.
+            ///	Dispose of resources being used by the synchronisation context.
             /// </summary>
             void IDisposable.Dispose()
             {
                 if (_workItemQueue != null)
                 {
-                    _workItemQueue.Dispose();
-                    _workItemQueue = null;
+                    TerminateMessagePump(); //signal waiters
+                    StopMessagePump();
                 }
             }
 
 
             /// <summary>
-            ///		Check if the synchronisation context has been disposed.
+            ///	Check if the synchronisation context has been disposed.
             /// </summary>
             void CheckDisposed()
             {
-                if (_workItemQueue == null)
-                    throw new ObjectDisposedException(GetType().Name);
+                ObjectDisposedException.ThrowIf(_workItemQueue == null, GetType());
             }
 
 
             /// <summary>
-            ///		Run the message pump for the callback queue on the current thread.
+            ///	Start the message pump again for more callbacks.
             /// </summary>
-            void RunMessagePump()
+            void StartMessagePump()
+            {
+                ObjectDisposedException.ThrowIf(_workItemQueue != null, GetType());
+
+                _workItemQueue = new();
+            }
+
+
+            /// <summary>
+            ///	Run the message pump for the callback queue on the current thread.
+            /// </summary>
+            void RunMessagePump(TimeSpan? timeout = null)
             {
                 CheckDisposed();
 
-
-                KeyValuePair<SendOrPostCallback, object> workItem;
-                while (_workItemQueue.TryTake(out workItem, Timeout.InfiniteTimeSpan))
+                while (_workItemQueue!.TryTake(out var workItem, timeout ?? Timeout.InfiniteTimeSpan))
                 {
-                    workItem.Key(workItem.Value);
-
+                    var (callback, state) = workItem;
+                    callback?.Invoke(state);
 
                     // Has the synchronisation context been disposed?
                     if (_workItemQueue == null)
@@ -498,46 +501,121 @@ namespace TTRider.PowerShellAsync
 
 
             /// <summary>
-            ///		Terminate the message pump once all callbacks have completed.
+            ///	Terminate the message pump once all callbacks have completed.
             /// </summary>
             void TerminateMessagePump()
             {
                 CheckDisposed();
 
-
-                _workItemQueue.CompleteAdding();
+                _workItemQueue!.CompleteAdding();
             }
 
 
             /// <summary>
-            ///		Dispatch an asynchronous message to the synchronization context.
+            ///	Stop the message pump and free resources.
             /// </summary>
-            /// <param name="callback">
-            ///		The <see cref="SendOrPostCallback"/> delegate to call in the synchronisation context.
-            /// </param>
-            /// <param name="callbackState">
-            ///		Optional state data passed to the callback.
-            /// </param>
-            /// <exception cref="InvalidOperationException">
-            ///		The message pump has already been started, and then terminated by calling <see cref="TerminateMessagePump"/>.
-            /// </exception>
-            public override void Post(SendOrPostCallback callback, object callbackState)
+            void StopMessagePump()
             {
-                if (callback == null)
-                    throw new ArgumentNullException(nameof(callback));
-
-
                 CheckDisposed();
 
+                _workItemQueue!.Dispose();
+                _workItemQueue = null;
+            }
 
+
+            /// <summary>
+            /// Synchronously executes a delegate on this synchronization context and returns its result.
+            /// </summary>
+            /// <typeparam name="T">The type of the result.</typeparam>
+            /// <param name="this">The synchronization context.</param>
+            /// <param name="action">The delegate to execute.</param>
+            /// <exception cref="InvalidOperationException">
+            /// The message pump has already been started, and then terminated by calling <see cref="TerminateMessagePump"/>.
+            /// </exception>
+            public T Send<T>(Func<T> action)
+            {
+                return UseContext(() =>
+                {
+                    T? result = default;
+                    Post(_ =>
+                    {
+                        result = action();
+                    }, null);
+                    RunQueueSynchronized(once: true);
+                    return result!;
+                });
+            }
+
+
+            // <summary>
+            /// Synchronously executes a Task on this synchronization context and waits for it to finish.
+            /// </summary>
+            /// <param name="action">The task to execute.</param>
+            /// <param name="timeout">Timeout the task has to run until it is cancelled.</param>
+            /// <exception cref="InvalidOperationException">
+            /// The message pump has already been started, and then terminated by calling <see cref="TerminateMessagePump"/>.
+            /// </exception>
+            public void SendAsync(Func<Task> action, TimeSpan? timeout = null)
+            {
+                UseContext(() =>
+                {
+                    StartMessagePump();
+                    Post(_ =>
+                    {
+                        var task = action();
+                        task.ContinueWith(_ =>
+                        {
+                            TerminateMessagePump();
+                        }, scheduler: TaskScheduler.Default);
+                    }, null);
+                    RunQueueSynchronized(timeout);
+                    StopMessagePump();
+                    return true;
+                });
+            }
+
+
+            /// <summary>
+            /// Asynchronously executes a delegate on this synchronization context.
+            /// </summary>
+            /// <param name="action">The delegate to execute.</param>
+            /// <exception cref="InvalidOperationException">
+            /// The message pump has already been started, and then terminated by calling <see cref="TerminateMessagePump"/>.
+            /// </exception>
+            public void Post(Action action)
+            {
+                Post(_ => action(), null);
+            }
+
+
+            /// <summary>
+            /// Asynchronously executes a delegate on this synchronization context.
+            /// </summary>
+            /// <param name="callback">
+            ///	The <see cref="SendOrPostCallback"/>Delegate to call in the synchronisation context.
+            /// </param>
+            /// <param name="callbackState">
+            /// Optional state data passed to the callback.
+            /// </param>
+            /// <exception cref="InvalidOperationException">
+            /// The message pump has already been started, and then terminated by calling <see cref="TerminateMessagePump"/>.
+            /// </exception>
+            public override void Post(SendOrPostCallback? callback, object? callbackState)
+            {
+                ArgumentNullException.ThrowIfNull(callback, nameof(callback));
+                CheckDisposed();
+
+                // Implement reentrancy
+                if (Current is ThreadAffinitiveSynchronizationContext)
+                {
+                    callback!(callbackState);
+                    return;
+                }
+
+                // Send it to the Queue to be run in the proper thread.
                 try
                 {
-                    _workItemQueue.Add(
-                        new KeyValuePair<SendOrPostCallback, object>(
-                            key: callback,
-                            value: callbackState
-                        )
-                    );
+                    _workItemQueue!.Add((callback, callbackState));
                 }
                 catch (InvalidOperationException eMessagePumpAlreadyTerminated)
                 {
@@ -548,122 +626,63 @@ namespace TTRider.PowerShellAsync
                 }
             }
 
-
-            /// <summary>
-            ///		Run an asynchronous operation using the current thread as its synchronisation context.
-            /// </summary>
-            /// <param name="asyncOperation">
-            ///		A <see cref="Func{TResult}"/> delegate representing the asynchronous operation to run.
-            /// </param>
-            public static void RunSynchronized(Action asyncOperation)
+            public T UseContext<T>(Func<T> value)
             {
-#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
-                RunSynchronized<object>(async () =>
-                {
-                    asyncOperation();
-                    return null!;
-                });
-#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
-            }
-
-
-            /// <summary>
-            ///		Run an asynchronous operation using the current thread as its synchronisation context.
-            /// </summary>
-            /// <param name="asyncOperation">
-            ///		A <see cref="Func{TResult}"/> delegate representing the asynchronous operation to run.
-            /// </param>
-            public static void RunSynchronized(Func<Task> asyncOperation)
-            {
-                RunSynchronized<object>(async () =>
-                {
-                    await asyncOperation();
-                    return null!;
-                });
-            }
-
-
-            /// <summary>
-            ///		Run an asynchronous operation using the current thread as its synchronisation context.
-            /// </summary>
-            /// <typeparam name="TResult">
-            ///		The operation result type.
-            /// </typeparam>
-            /// <param name="asyncOperation">
-            ///		A <see cref="Func{TResult}"/> delegate representing the asynchronous operation to run.
-            /// </param>
-            /// <returns>
-            ///		The operation result.
-            /// </returns>
-            public static TResult RunSynchronized<TResult>(Func<Task<TResult>> asyncOperation)
-            {
-                if (asyncOperation == null)
-                    throw new ArgumentNullException(nameof(asyncOperation));
-
-                /// Implement reentrancy
-                if (Current is ThreadAffinitiveSynchronizationContext)
-                {
-                    return asyncOperation().GetAwaiter().GetResult();
-                }
-
-                SynchronizationContext savedContext = Current;
+                SynchronizationContext? savedContext = Current;
                 try
                 {
-                    using (ThreadAffinitiveSynchronizationContext synchronizationContext = new ThreadAffinitiveSynchronizationContext())
-                    {
-                        SetSynchronizationContext(synchronizationContext);
-
-
-                        Task<TResult> rootOperationTask = asyncOperation();
-                        if (rootOperationTask == null)
-                            throw new InvalidOperationException("The asynchronous operation delegate cannot return null.");
-
-
-                        rootOperationTask.ContinueWith(
-                            operationTask =>
-                                synchronizationContext.TerminateMessagePump(),
-                            scheduler:
-                                TaskScheduler.Default
-                        );
-
-
-                        synchronizationContext.RunMessagePump();
-
-
-                        try
-                        {
-                            return
-                                rootOperationTask
-                                    .GetAwaiter()
-                                    .GetResult();
-                        }
-                        catch (AggregateException eWaitForTask) // The TPL will almost always wrap an AggregateException around any exception thrown by the async operation.
-                        {
-                            // Is this just a wrapped exception?
-                            AggregateException flattenedAggregate = eWaitForTask.Flatten();
-                            if (flattenedAggregate.InnerExceptions.Count != 1)
-                                throw; // Nope, genuine aggregate.
-
-
-                            // Yep, so rethrow (preserving original stack-trace).
-                            ExceptionDispatchInfo
-                                .Capture(
-                                    flattenedAggregate
-                                        .InnerExceptions[0]
-                                )
-                                .Throw();
-
-
-                            throw; // Never reached.
-                        }
-                    }
+                    SetSynchronizationContext(this);
+                    return value();
                 }
                 finally
                 {
                     SetSynchronizationContext(savedContext);
                 }
             }
-        }
 
+            /// <summary>
+            ///	Run the queue synchronously until it becomes empty.
+            /// </summary>
+            /// <param name="timeout">Timeout the task has to run until it is cancelled.</param>
+            private static void RunQueueSynchronized(TimeSpan? timeout = null, bool once = false)
+            {
+                var synchronizationContext = Current as ThreadAffinitiveSynchronizationContext;
+                System.Diagnostics.Debug.Assert(synchronizationContext != null);
+
+                var cancellationToken = Task.Factory.CancellationToken;
+
+                if (timeout != null)
+                {
+                    var cts = new CancellationTokenSource();
+                    cts.CancelAfter(timeout.Value);
+                    cancellationToken = cts.Token;
+                }
+
+                try
+                {
+                    while (!synchronizationContext._workItemQueue!.IsCompleted && !once)
+                    {
+                        synchronizationContext.RunMessagePump();
+                    }
+                }
+                catch (AggregateException eWaitForTask) // The TPL will almost always wrap an AggregateException around any exception thrown by the async operation.
+                {
+                    // Is this just a wrapped exception?
+                    AggregateException flattenedAggregate = eWaitForTask.Flatten();
+                    if (flattenedAggregate.InnerExceptions.Count != 1)
+                        throw; // Nope, genuine aggregate.
+
+                    // Yep, so rethrow (preserving original stack-trace).
+                    ExceptionDispatchInfo
+                        .Capture(
+                            flattenedAggregate
+                                .InnerExceptions[0]
+                        )
+                        .Throw();
+
+                    throw; // Never reached.
+                }
+            }
+        }
     }
 }
