@@ -57,6 +57,8 @@ namespace TTRider.PowerShellAsync.UnitTests
             return (ret, ps);
         }
 
+        private Predicate<object> stringMatcher(object o) => (object o2) => o.ToString() == o2.ToString();
+
         [Test]
         public void WriteObject()
         {
@@ -103,8 +105,6 @@ namespace TTRider.PowerShellAsync.UnitTests
             Assert.That(context.ErrorLines, Is.Empty); // without out-default errors don't go to the console
             Assert.That(context.ProgressRecords, Has.One.EqualTo(TestData.ProgressRecord));
 
-            Predicate<object> stringMatcher(object o) => (object o2) => o.ToString() == o2.ToString();
-
             Assert.That(output.powershell.Streams.Error, Has.One.Matches(stringMatcher(TestData.ErrorRecord)));
             Assert.That(output.powershell.Streams.Debug, Has.One.Matches(stringMatcher(TestData.DebugRecord)));
             Assert.That(output.powershell.Streams.Progress, Has.One.Matches(stringMatcher(TestData.ProgressRecord)));
@@ -131,10 +131,34 @@ namespace TTRider.PowerShellAsync.UnitTests
         public void Cancellation()
         {
             var context = new PsCommandContext();
-            var output = RunCommand(ps => ps.AddCommand("Test-Cancellation"), context);
-            output.powershell.Stop();
+            var output = RunCommand(ps =>
+            {
+                ps.AddCommand("Test-Cancellation");
+                ThreadPool.QueueUserWorkItem(async _ =>
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(50));
+                    ps.Stop();
+                });
+            }, context);
 
-            Assert.That(context.ErrorLines.Count, Is.EqualTo(1));
+            Assert.That(output.powershell.InvocationStateInfo.Reason, Is.InstanceOf<PipelineStoppedException>());
+        }
+
+        [Test]
+        public void CancellationCooperative()
+        {
+            var context = new PsCommandContext();
+            var output = RunCommand(ps =>
+            {
+                ps.AddCommand("Test-CancellationCooperative");
+                ThreadPool.QueueUserWorkItem(async _ =>
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(50));
+                    ps.Stop();
+                });
+            }, context);
+
+            Assert.That(output.powershell.InvocationStateInfo.Reason, Is.InstanceOf<PipelineStoppedException>());
         }
 
         [Test]
@@ -147,6 +171,17 @@ namespace TTRider.PowerShellAsync.UnitTests
             Assert.That(output.result, Has.One.EqualTo(TestData.ShouldProcessSwitch));
         }
 
+        [Test]
+        public void Exception()
+        {
+            var context = new PsCommandContext();
+            var exception = Assert.Throws<CmdletInvocationException>(() =>
+            {
+                RunCommand(ps => ps.AddCommand("Test-Exception"), context);
+            });
+
+            Assert.That(exception, Has.InnerException.EqualTo(TestData.InvocationException.InnerException));
+        }
     }
 
     [Cmdlet("Test", "WriteObject")]
@@ -198,7 +233,7 @@ namespace TTRider.PowerShellAsync.UnitTests
     public class TestSyncProcessing : AsyncCmdlet
     {
         [Parameter(ValueFromPipeline = true, Mandatory = true)]
-        public object? Item{ get; set; }
+        public object? Item { get; set; }
 
         protected override Task BeginProcessingAsync()
         {
@@ -266,9 +301,23 @@ namespace TTRider.PowerShellAsync.UnitTests
     {
         protected override async Task ProcessRecordAsync()
         {
-            await Task.Delay(TimeSpan.MaxValue);
+            // we have to allow the state machine to run the next enumerator
+            // because cancelling of Task is implicitly cooperative.
+            while (true)
+                await Task.Delay(1);
         }
     }
+
+
+    [Cmdlet("Test", "CancellationCooperative")]
+    public class TestCancellationCooperative : AsyncCmdlet
+    {
+        protected override async Task ProcessRecordAsync(CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+    }
+
 
     [Cmdlet("Test", "Switches")]
     public class TestSwitches : AsyncCmdlet
@@ -277,11 +326,24 @@ namespace TTRider.PowerShellAsync.UnitTests
         {
             if (this.ShouldProcess(TestData.ShouldProcessSwitch))
             {
-                await Task.Delay(1);
+                await Task.Delay(TimeSpan.FromMilliseconds(1));
                 this.WriteObject(TestData.ShouldProcessSwitch);
             }
         }
     }
+
+
+    [Cmdlet("Test", "Exception")]
+    public class TestException : AsyncCmdlet
+    {
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+        protected override async Task ProcessRecordAsync()
+        {
+            throw TestData.InvocationException.InnerException!;
+        }
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+    }
+
 
     public class TestData
     {
@@ -307,6 +369,8 @@ namespace TTRider.PowerShellAsync.UnitTests
         public static readonly InformationRecord InformationRecord = new("messageData", "source");
 
         public static readonly string ShouldProcessSwitch = "ShouldProcessSwitch";
+
+        public static readonly CmdletInvocationException InvocationException = new(String.Empty, new Exception());
     }
 
 }
