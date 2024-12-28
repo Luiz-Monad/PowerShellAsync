@@ -4,6 +4,7 @@ using System.Management.Automation;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Nito.AsyncEx.Synchronous;
 
 namespace TTRider.PowerShellAsync
 {
@@ -13,39 +14,26 @@ namespace TTRider.PowerShellAsync
     /// <remarks>
     ///	Inherit from this class if your Cmdlet needs to use <c>async</c> / <c>await</c> functionality.
     /// </remarks>
-    public abstract class AsyncCmdlet : PSCmdlet
+    public abstract class AsyncCmdlet : PSCmdlet, IDisposable
     {
         private static readonly TimeSpan CancellationTimeout = TimeSpan.FromMicroseconds(250);
 
         /// <summary>
-        ///	The source for cancellation tokens that can be used to cancel the operation.
-        /// </summary>
-        readonly CancellationTokenSource _cancellationSource = new();
-
-        /// <summary>
         ///	The synchronisation context to run all async tasks on a single thread, the powershell thread.
         /// </summary>
-        readonly ThreadAffinitiveSynchronizationContext _syncContext = new();
+        private readonly ThreadAffinitiveSynchronizationContext _syncContext = new();
 
         #region Construction and Destruction
 
         /// <summary>
-        ///	Initialise the <see cref="AsyncCmdlet"/>.
+        ///	Initialiser the <see cref="AsyncCmdlet"/>.
         /// </summary>
         protected AsyncCmdlet()
         {
         }
 
         /// <summary>
-        ///	Finaliser for <see cref="AsyncCmdlet"/>.
-        /// </summary>
-        ~AsyncCmdlet()
-        {
-            Dispose(false);
-        }
-
-        /// <summary>
-        ///	Dispose of resources being used by the Cmdlet.
+        ///	Disposer for <see cref="AsyncCmdlet"/>.
         /// </summary>
         public void Dispose()
         {
@@ -54,7 +42,7 @@ namespace TTRider.PowerShellAsync
         }
 
         /// <summary>
-        ///	Dispose of resources being used by the Cmdlet.
+        ///	Dispose of resources being used by the <see cref="AsyncCmdlet"/>.
         /// </summary>
         /// <param name="disposing">
         ///	Explicit disposal?
@@ -63,7 +51,7 @@ namespace TTRider.PowerShellAsync
         {
             if (disposing)
             {
-                _cancellationSource.Dispose();
+                _syncContext.Dispose();
             }
         }
 
@@ -105,8 +93,13 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         protected sealed override void StopProcessing()
         {
-            this._syncContext.SendAsync(StopProcessingAsync, CancellationTimeout);
-            this._cancellationSource.Cancel();
+            //this doesn't run from the pipeline thread.
+            using (var context = new ThreadAffinitiveSynchronizationContext())
+            using (new SynchronizationContextScope(context))
+            {
+                context.SendAsync(StopProcessingAsync, CancellationTimeout);
+            }
+            this._syncContext.Cancel();
         }
 
         #endregion Sealed Overrides
@@ -295,7 +288,7 @@ namespace TTRider.PowerShellAsync
         /// </exception>
         protected virtual Task BeginProcessingAsync()
         {
-            return BeginProcessingAsync(_cancellationSource.Token);
+            return BeginProcessingAsync(_syncContext.CancellationToken);
         }
 
         /// <summary>
@@ -330,7 +323,7 @@ namespace TTRider.PowerShellAsync
         /// </exception>
         protected virtual Task EndProcessingAsync()
         {
-            return EndProcessingAsync(_cancellationSource.Token);
+            return EndProcessingAsync(_syncContext.CancellationToken);
         }
 
         /// <summary>
@@ -364,7 +357,7 @@ namespace TTRider.PowerShellAsync
         /// </exception>
         protected virtual Task ProcessRecordAsync()
         {
-            return ProcessRecordAsync(_cancellationSource.Token);
+            return ProcessRecordAsync(_syncContext.CancellationToken);
         }
 
         /// <summary>
@@ -398,7 +391,7 @@ namespace TTRider.PowerShellAsync
         /// </exception>
         protected virtual Task StopProcessingAsync()
         {
-            return StopProcessingAsync(_cancellationSource.Token);
+            return StopProcessingAsync(ThreadAffinitiveSynchronizationContext.Current!.CancellationToken);
         }
 
         /// <summary>
@@ -434,10 +427,17 @@ namespace TTRider.PowerShellAsync
         public sealed class ThreadAffinitiveSynchronizationContext
             : SynchronizationContext, IDisposable
         {
+
+            /// <summary>
+            ///	The source for cancellation tokens that can be used to cancel the operation.
+            /// </summary>
+            CancellationTokenSource? _cancellationTokenSource = new();
+
+
             /// <summary>
             ///	A blocking collection (effectively a queue) of work items to execute, consisting of callback delegates and their callback state (if any).
             /// </summary>
-            BlockingCollection<(SendOrPostCallback? callback, object? callbackState)>? _workItemQueue;
+            private BlockingCollection<(SendOrPostCallback? callback, object? callbackState)>? _workItemQueue;
 
 
             /// <summary>
@@ -449,14 +449,38 @@ namespace TTRider.PowerShellAsync
 
 
             /// <summary>
+            ///	The current synchonization context for the thread.
+            /// </summary>
+            public static new ThreadAffinitiveSynchronizationContext? Current =>
+                SynchronizationContext.Current as ThreadAffinitiveSynchronizationContext;
+
+
+            /// <summary>
+            ///	The cancellation token that can be used to register operations for cancellation.
+            /// </summary>
+            public CancellationToken CancellationToken => _cancellationTokenSource!.Token;
+
+
+            /// <summary>
+            ///	Cancel the operation and all outgoing tasks.
+            /// </summary>
+            public void Cancel() => _cancellationTokenSource!.Cancel();
+
+
+            /// <summary>
             ///	Dispose of resources being used by the synchronisation context.
             /// </summary>
-            void IDisposable.Dispose()
+            public void Dispose()
             {
                 if (_workItemQueue != null)
                 {
                     TerminateMessagePump(); //signal waiters
                     StopMessagePump();
+                }
+                if (_cancellationTokenSource != null)
+                {
+                    _cancellationTokenSource.Dispose();
+                    _cancellationTokenSource = null;
                 }
             }
 
@@ -484,18 +508,21 @@ namespace TTRider.PowerShellAsync
             /// <summary>
             ///	Run the message pump for the callback queue on the current thread.
             /// </summary>
-            void RunMessagePump(TimeSpan? timeout = null)
+            void RunMessagePump(CancellationToken cancellationToken)
             {
                 CheckDisposed();
 
-                while (_workItemQueue!.TryTake(out var workItem, timeout ?? Timeout.InfiniteTimeSpan))
+                while (!_workItemQueue!.IsCompleted && !cancellationToken.IsCancellationRequested)
                 {
-                    var (callback, state) = workItem;
-                    callback?.Invoke(state);
+                    while (_workItemQueue!.TryTake(out var workItem, Timeout.Infinite, cancellationToken))
+                    {
+                        var (callback, state) = workItem;
+                        callback?.Invoke(state);
 
-                    // Has the synchronisation context been disposed?
-                    if (_workItemQueue == null)
-                        break;
+                        // Has the synchronisation context been disposed?
+                        if (_workItemQueue == null)
+                            break;
+                    }
                 }
             }
 
@@ -524,6 +551,26 @@ namespace TTRider.PowerShellAsync
 
 
             /// <summary>
+            ///	Allow using clause with the message pump start/stop.
+            /// </summary>
+            public sealed class MessagePumpScope : IDisposable
+            {
+                private readonly ThreadAffinitiveSynchronizationContext _savedContext;
+
+                public MessagePumpScope(ThreadAffinitiveSynchronizationContext context)
+                {
+                    _savedContext = context;
+                    _savedContext.StartMessagePump();
+                }
+
+                public void Dispose()
+                {
+                    _savedContext.StopMessagePump();
+                }
+            }
+
+
+            /// <summary>
             /// Synchronously executes a delegate on this synchronization context and returns its result.
             /// </summary>
             /// <typeparam name="T">The type of the result.</typeparam>
@@ -534,16 +581,19 @@ namespace TTRider.PowerShellAsync
             /// </exception>
             public T Send<T>(Func<T> action)
             {
-                return UseContext(() =>
+                TaskCompletionSource<T> tcs = new();
+                Post(_ =>
                 {
-                    T? result = default;
-                    Post(_ =>
+                    try
                     {
-                        result = action();
-                    }, null);
-                    RunQueueSynchronized(once: true);
-                    return result!;
-                });
+                        tcs.SetResult(action());
+                    }
+                    catch (Exception ex)
+                    {
+                        tcs.SetException(ex);
+                    }
+                }, null);
+                return tcs.Task.Result;
             }
 
 
@@ -557,21 +607,23 @@ namespace TTRider.PowerShellAsync
             /// </exception>
             public void SendAsync(Func<Task> action, TimeSpan? timeout = null)
             {
-                UseContext(() =>
+                using (new SynchronizationContextScope(this))
+                using (new MessagePumpScope(this))
                 {
-                    StartMessagePump();
                     Post(_ =>
                     {
                         var task = action();
-                        task.ContinueWith(_ =>
+                        task.ContinueWith(t =>
                         {
+                            if (t.IsFaulted)
+                            {
+                                Post(_ => throw t.Exception, null);
+                            }
                             TerminateMessagePump();
                         }, scheduler: TaskScheduler.Default);
                     }, null);
                     RunQueueSynchronized(timeout);
-                    StopMessagePump();
-                    return true;
-                });
+                };
             }
 
 
@@ -602,14 +654,17 @@ namespace TTRider.PowerShellAsync
             /// </exception>
             public override void Post(SendOrPostCallback? callback, object? callbackState)
             {
-                ArgumentNullException.ThrowIfNull(callback, nameof(callback));
+                ArgumentNullException.ThrowIfNull(callback);
                 CheckDisposed();
 
                 // Implement reentrancy
-                if (Current is ThreadAffinitiveSynchronizationContext)
+                if (Current is not null)
                 {
-                    callback!(callbackState);
-                    return;
+                    using (new SynchronizationContextScope(this))
+                    {
+                        callback!(callbackState);
+                        return;
+                    };
                 }
 
                 // Send it to the Queue to be run in the proper thread.
@@ -626,44 +681,26 @@ namespace TTRider.PowerShellAsync
                 }
             }
 
-            public T UseContext<T>(Func<T> value)
-            {
-                SynchronizationContext? savedContext = Current;
-                try
-                {
-                    SetSynchronizationContext(this);
-                    return value();
-                }
-                finally
-                {
-                    SetSynchronizationContext(savedContext);
-                }
-            }
 
             /// <summary>
             ///	Run the queue synchronously until it becomes empty.
             /// </summary>
             /// <param name="timeout">Timeout the task has to run until it is cancelled.</param>
-            private static void RunQueueSynchronized(TimeSpan? timeout = null, bool once = false)
+            private static void RunQueueSynchronized(TimeSpan? timeout = null)
             {
-                var synchronizationContext = Current as ThreadAffinitiveSynchronizationContext;
-                System.Diagnostics.Debug.Assert(synchronizationContext != null);
-
-                var cancellationToken = Task.Factory.CancellationToken;
+                ArgumentNullException.ThrowIfNull(Current);
+                var cancellationToken = Current.CancellationToken;
 
                 if (timeout != null)
                 {
-                    var cts = new CancellationTokenSource();
+                    var cts = CancellationTokenSource.CreateLinkedTokenSource(Current.CancellationToken);
                     cts.CancelAfter(timeout.Value);
                     cancellationToken = cts.Token;
                 }
 
                 try
                 {
-                    while (!synchronizationContext._workItemQueue!.IsCompleted && !once)
-                    {
-                        synchronizationContext.RunMessagePump();
-                    }
+                    Current.RunMessagePump(cancellationToken);
                 }
                 catch (AggregateException eWaitForTask) // The TPL will almost always wrap an AggregateException around any exception thrown by the async operation.
                 {
@@ -682,6 +719,27 @@ namespace TTRider.PowerShellAsync
 
                     throw; // Never reached.
                 }
+            }
+
+        }
+
+
+        /// <summary>
+        ///	Allow using clause with a synchronisation context (<see cref="SynchronizationContext"/>).
+        /// </summary>
+        public sealed class SynchronizationContextScope : IDisposable
+        {
+            private readonly SynchronizationContext? _savedContext;
+
+            public SynchronizationContextScope(SynchronizationContext newContext)
+            {
+                _savedContext = SynchronizationContext.Current;
+                SynchronizationContext.SetSynchronizationContext(newContext);
+            }
+
+            public void Dispose()
+            {
+                SynchronizationContext.SetSynchronizationContext(_savedContext);
             }
         }
     }
