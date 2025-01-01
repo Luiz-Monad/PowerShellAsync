@@ -3,5 +3,9 @@
 //(new TestPsBase()).SynchronizationContext();
 //(new TestPsBase()).WriteObject();
 //(new TestPsBase()).Switches();
-(new TestPsBase()).Cancellation();
+while (true)
+{
+    Console.WriteLine("testing...");
+    (new TestPsBase()).Cancellation();
+}
 

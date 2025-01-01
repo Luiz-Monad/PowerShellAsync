@@ -21,6 +21,7 @@ namespace TTRider.PowerShellAsync.UnitTests
 
         static TestPsBase()
         {
+            //AsyncCmdlet.ThreadAffinitiveSynchronizationContext.TraceWriteLine = (s, o) => TestContext.Out.WriteLine(s, o);
             runspace = RunspaceFactory.CreateRunspace();
             runspace.Open();
             ImportModule();
@@ -127,15 +128,17 @@ namespace TTRider.PowerShellAsync.UnitTests
             Assert.That(finalProcessId.ToString(), Is.EqualTo(initialProcessId.ToString()));
         }
 
-        [Test]
+        [Test, Repeat(5)]
         public void Cancellation()
         {
+            TestCancellation.Started.Reset();
             var context = new PsCommandContext();
             var output = RunCommand(ps =>
             {
                 ps.AddCommand("Test-Cancellation");
                 ThreadPool.QueueUserWorkItem(async _ =>
                 {
+                    TestCancellation.Started.Wait();
                     await Task.Delay(TimeSpan.FromMilliseconds(50));
                     ps.Stop();
                 });
@@ -144,15 +147,17 @@ namespace TTRider.PowerShellAsync.UnitTests
             Assert.That(output.powershell.InvocationStateInfo.Reason, Is.InstanceOf<PipelineStoppedException>());
         }
 
-        [Test]
+        [Test, Repeat(5)]
         public void CancellationCooperative()
         {
+            TestCancellationCooperative.Started.Reset();
             var context = new PsCommandContext();
             var output = RunCommand(ps =>
             {
                 ps.AddCommand("Test-CancellationCooperative");
                 ThreadPool.QueueUserWorkItem(async _ =>
                 {
+                    TestCancellationCooperative.Started.Wait();
                     await Task.Delay(TimeSpan.FromMilliseconds(50));
                     ps.Stop();
                 });
@@ -299,8 +304,10 @@ namespace TTRider.PowerShellAsync.UnitTests
     [Cmdlet("Test", "Cancellation")]
     public class TestCancellation : AsyncCmdlet
     {
+        public static readonly ManualResetEventSlim Started = new();
         protected override async Task ProcessRecordAsync()
         {
+            Started.Set();
             // we have to allow the state machine to run the next enumerator
             // because cancelling of Task is implicitly cooperative.
             while (true)
@@ -312,8 +319,10 @@ namespace TTRider.PowerShellAsync.UnitTests
     [Cmdlet("Test", "CancellationCooperative")]
     public class TestCancellationCooperative : AsyncCmdlet
     {
+        public static readonly ManualResetEventSlim Started = new();
         protected override async Task ProcessRecordAsync(CancellationToken cancellationToken)
         {
+            Started.Set();
             await Task.Delay(Timeout.Infinite, cancellationToken);
         }
     }

@@ -4,6 +4,7 @@ using System.Management.Automation;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Nito.AsyncEx;
 using Nito.AsyncEx.Synchronous;
 
 namespace TTRider.PowerShellAsync
@@ -65,6 +66,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         protected sealed override void BeginProcessing()
         {
+
             this._syncContext.SendAsync(BeginProcessingAsync);
         }
 
@@ -94,11 +96,7 @@ namespace TTRider.PowerShellAsync
         protected sealed override void StopProcessing()
         {
             //this doesn't run from the pipeline thread.
-            using (var context = new ThreadAffinitiveSynchronizationContext())
-            using (new SynchronizationContextScope(context))
-            {
-                context.SendAsync(StopProcessingAsync, CancellationTimeout);
-            }
+            this._syncContext.Send(StopProcessingAsync).Wait(CancellationTimeout);
             this._syncContext.Cancel();
         }
 
