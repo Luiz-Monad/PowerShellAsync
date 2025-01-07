@@ -4,8 +4,6 @@ using System.Management.Automation;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Nito.AsyncEx;
-using Nito.AsyncEx.Synchronous;
 
 namespace TTRider.PowerShellAsync
 {
@@ -439,12 +437,17 @@ namespace TTRider.PowerShellAsync
 
 
             /// <summary>
+            ///	Lock used on state-change start/stop.
+            /// </summary>
+            private object _workItemQueueLock = new();
+
+
+            /// <summary>
             ///	Create a new thread-affinitive synchronisation context.
             /// </summary>
             public ThreadAffinitiveSynchronizationContext()
             {
             }
-
 
             /// <summary>
             ///	The current synchonization context for the thread.
@@ -470,11 +473,7 @@ namespace TTRider.PowerShellAsync
             /// </summary>
             public void Dispose()
             {
-                if (_workItemQueue != null)
-                {
-                    TerminateMessagePump(); //signal waiters
-                    StopMessagePump();
-                }
+                StopMessagePump();
                 if (_cancellationTokenSource != null)
                 {
                     _cancellationTokenSource.Dispose();
@@ -499,7 +498,10 @@ namespace TTRider.PowerShellAsync
             {
                 ObjectDisposedException.ThrowIf(_workItemQueue != null, GetType());
 
-                _workItemQueue = new();
+                lock (_workItemQueueLock)
+                {
+                    _workItemQueue = new();
+                }
             }
 
 
@@ -541,10 +543,15 @@ namespace TTRider.PowerShellAsync
             /// </summary>
             void StopMessagePump()
             {
-                CheckDisposed();
-
-                _workItemQueue!.Dispose();
-                _workItemQueue = null;
+                lock (_workItemQueueLock)
+                {
+                    if (_workItemQueue != null)
+                    {
+                        TerminateMessagePump(); //signal waiters
+                        _workItemQueue!.Dispose();
+                        _workItemQueue = null;
+                    }
+                }
             }
 
 
@@ -653,7 +660,6 @@ namespace TTRider.PowerShellAsync
             public override void Post(SendOrPostCallback? callback, object? callbackState)
             {
                 ArgumentNullException.ThrowIfNull(callback);
-                CheckDisposed();
 
                 // Implement reentrancy
                 if (Current is not null)
@@ -669,6 +675,10 @@ namespace TTRider.PowerShellAsync
                 try
                 {
                     _workItemQueue!.Add((callback, callbackState));
+                }
+                catch (ObjectDisposedException)
+                {
+                    // queue was disposed because of cancellation.
                 }
                 catch (InvalidOperationException eMessagePumpAlreadyTerminated)
                 {
