@@ -1,19 +1,60 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web.Services.Description;
-using NUnit.Framework.Interfaces;
-using TTRider.PowerShellAsync;
+using NUnit.Framework.Diagnostics;
 using TTRider.PowerShellAsync.UnitTests.Infrastructure;
+using DTrace = System.Diagnostics.Trace;
+using static TTRider.PowerShellAsync.UnitTests.SetupTrace;
 
 namespace TTRider.PowerShellAsync.UnitTests
 {
+    [SetUpFixture]
+    public class SetupTrace
+    {
+        [OneTimeSetUp]
+        public void StartTest()
+        {
+            if (!DTrace.Listeners.OfType<ProgressTraceListener>().Any())
+                DTrace.Listeners.Add(new ProgressTraceListener());
+            DTrace.WriteLine("log start");
+        }
+
+        [OneTimeTearDown]
+        public void EndTest()
+        {
+            DTrace.Flush();
+        }
+
+        [Conditional("TRACE")]
+        public static void Trace(object? arg0 = default,
+                                 object? arg1 = default,
+                                 object? arg2 = default,
+                                 object? arg3 = default,
+                                 [CallerMemberName] string memberName = "")
+        {
+            bool notNull(object? o) => o != null;
+            string display(object? o)
+            {
+                if (o == null) return string.Empty;
+                if (o is System.Delegate d) return d.Method.Name;
+                return o.ToString() ?? string.Empty;
+            }
+            var tid = System.Threading.Thread.CurrentThread.ManagedThreadId;
+            var sout = (String.Join(' ',
+                ((object?[])[tid, "Test", memberName, arg0, arg1, arg2, arg3])
+                .Where(notNull)
+                .Select(display)));
+            System.Diagnostics.Trace.WriteLine(sout);
+        }
+
+    }
+
     [TestFixture]
     public class TestPsBase
     {
@@ -51,7 +92,7 @@ namespace TTRider.PowerShellAsync.UnitTests
 
             foreach (var result in ps.Invoke(Array.Empty<object>(), settings))
             {
-                Trace.WriteLine(result);
+                Trace(result);
                 ret.Add(result.ToString());
             }
 
@@ -135,11 +176,15 @@ namespace TTRider.PowerShellAsync.UnitTests
             var context = new PsCommandContext();
             var output = RunCommand(ps =>
             {
+                Trace("runcmd");
                 ps.AddCommand("Test-Cancellation");
                 ThreadPool.QueueUserWorkItem(async _ =>
                 {
+                    Trace("wait");
                     TestCancellation.Started.Wait();
+                    Trace("delay");
                     await Task.Delay(TimeSpan.FromMilliseconds(50));
+                    Trace("stop");
                     ps.Stop();
                 });
             }, context);
@@ -154,11 +199,15 @@ namespace TTRider.PowerShellAsync.UnitTests
             var context = new PsCommandContext();
             var output = RunCommand(ps =>
             {
+                Trace("runcmd");
                 ps.AddCommand("Test-CancellationCooperative");
                 ThreadPool.QueueUserWorkItem(async _ =>
                 {
+                    Trace("wait");
                     TestCancellationCooperative.Started.Wait();
+                    Trace("delay");
                     await Task.Delay(TimeSpan.FromMilliseconds(50));
+                    Trace("stop");
                     ps.Stop();
                 });
             }, context);
@@ -195,9 +244,11 @@ namespace TTRider.PowerShellAsync.UnitTests
 
         protected override Task ProcessRecordAsync()
         {
+            Trace(1);
             this.WriteObject(TestData.Objects[0]);
             return Task.Run(() =>
             {
+                Trace(22);
                 this.WriteObject(TestData.Objects.Skip(1).ToArray(), true);
             });
         }
@@ -211,10 +262,12 @@ namespace TTRider.PowerShellAsync.UnitTests
         {
             return Task.Run(() =>
             {
+                Trace(1);
                 var commandOrigin = this.CommandOrigin;
                 var commandRuntime = this.CommandRuntime;
                 var events = this.Events;
                 ProviderInfo pi;
+                Trace(2);
                 var psp = this.GetResolvedProviderPathFromPSPath(@"c:\", out pi);
                 var pathInfo = this.CurrentProviderLocation(pi.Name);
                 var psp2 = this.GetUnresolvedProviderPathFromPSPath(@"c:\");
@@ -229,6 +282,7 @@ namespace TTRider.PowerShellAsync.UnitTests
                 var sessionState = this.SessionState;
                 var stopping = this.Stopping;
                 var transactionAvailable = this.TransactionAvailable();
+                Trace(3);
             });
         }
     }
@@ -242,24 +296,28 @@ namespace TTRider.PowerShellAsync.UnitTests
 
         protected override Task BeginProcessingAsync()
         {
+            Trace();
             this.WriteObject(TestData.Processing.Begin);
             return base.BeginProcessingAsync();
         }
 
         protected override Task EndProcessingAsync()
         {
+            Trace();
             this.WriteObject(TestData.Processing.End);
             return base.EndProcessingAsync();
         }
 
         protected override Task StopProcessingAsync()
         {
+            Trace();
             this.WriteObject(TestData.Processing.Stop);
             return base.StopProcessingAsync();
         }
 
         protected override Task ProcessRecordAsync()
         {
+            Trace();
             this.WriteObject(TestData.Processing.Record);
             return base.ProcessRecordAsync();
         }
@@ -271,8 +329,10 @@ namespace TTRider.PowerShellAsync.UnitTests
     {
         protected override Task ProcessRecordAsync()
         {
+            Trace(1);
             return Task.Run(() =>
             {
+                Trace(2);
                 this.WriteCommandDetail(TestData.CommandDetail);
                 this.WriteDebug(TestData.Debug);
                 this.WriteError(TestData.ErrorRecord);
@@ -282,6 +342,7 @@ namespace TTRider.PowerShellAsync.UnitTests
                 this.WriteVerbose(TestData.Verbose);
                 this.WriteWarning(TestData.Warning);
                 this.WriteInformation(TestData.InformationRecord);
+                Trace(3);
             });
         }
     }
@@ -292,10 +353,12 @@ namespace TTRider.PowerShellAsync.UnitTests
     {
         protected override async Task ProcessRecordAsync()
         {
+            Trace(1);
             this.WriteObject(Thread.CurrentThread.ManagedThreadId);
 
             await Task.Delay(1);
 
+            Trace(2);
             this.WriteObject(Thread.CurrentThread.ManagedThreadId);
         }
     }
@@ -307,11 +370,16 @@ namespace TTRider.PowerShellAsync.UnitTests
         public static readonly ManualResetEventSlim Started = new();
         protected override async Task ProcessRecordAsync()
         {
+            Trace(1);
             Started.Set();
             // we have to allow the state machine to run the next enumerator
             // because cancelling of Task is implicitly cooperative.
             while (true)
+            {
+
+                Trace(2);
                 await Task.Delay(1);
+            }
         }
     }
 
@@ -322,8 +390,11 @@ namespace TTRider.PowerShellAsync.UnitTests
         public static readonly ManualResetEventSlim Started = new();
         protected override async Task ProcessRecordAsync(CancellationToken cancellationToken)
         {
+            Trace(1);
             Started.Set();
+            Trace(2);
             await Task.Delay(Timeout.Infinite, cancellationToken);
+            Trace(3);
         }
     }
 
@@ -333,9 +404,12 @@ namespace TTRider.PowerShellAsync.UnitTests
     {
         protected override async Task ProcessRecordAsync()
         {
+            Trace(1);
             if (this.ShouldProcess(TestData.ShouldProcessSwitch))
             {
+                Trace(2);
                 await Task.Delay(TimeSpan.FromMilliseconds(1));
+                Trace(3);
                 this.WriteObject(TestData.ShouldProcessSwitch);
             }
         }
@@ -348,6 +422,7 @@ namespace TTRider.PowerShellAsync.UnitTests
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
         protected override async Task ProcessRecordAsync()
         {
+            Trace();
             throw TestData.InvocationException.InnerException!;
         }
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously

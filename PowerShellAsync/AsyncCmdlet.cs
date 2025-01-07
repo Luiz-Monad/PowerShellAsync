@@ -1,12 +1,43 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Linq;
 using System.Management.Automation;
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace TTRider.PowerShellAsync
 {
+    internal class Debug
+    {
+        [Conditional("TRACE")]
+        public static void Trace(int objectHash,
+                                 object? arg0 = default,
+                                 object? arg1 = default,
+                                 object? arg2 = default,
+                                 object? arg3 = default)
+        {
+            var methodInfo = new StackTrace()!.GetFrame(1)!.GetMethod()!;
+            if (methodInfo.Name == "Trace")
+                methodInfo = new StackTrace()!.GetFrame(2)!.GetMethod()!;
+            bool notNull(object? o) => o != null;
+            string display(object? o)
+            {
+                if (o == null) return string.Empty;
+                if (o is System.Delegate d) return d.Method.Name;
+                return o.ToString() ?? string.Empty;
+            }
+            var tid = System.Threading.Thread.CurrentThread.ManagedThreadId;
+            var sout = (String.Join(' ',
+                ((object?[])[tid, objectHash, methodInfo.DeclaringType!.FullName, methodInfo.Name, arg0, arg1, arg2, arg3])
+                .Where(notNull)
+                .Select(display)));
+            System.Diagnostics.Trace.WriteLine(sout);
+        }
+    }
+
     /// <summary>
     /// Base class for Cmdlets that run asynchronously.
     /// </summary>
@@ -15,6 +46,14 @@ namespace TTRider.PowerShellAsync
     /// </remarks>
     public abstract class AsyncCmdlet : PSCmdlet, IDisposable
     {
+        [Conditional("TRACE")]
+        private void Trace(
+            object? arg0 = default,
+            object? arg1 = default,
+            object? arg2 = default,
+            object? arg3 = default) =>
+            Debug.Trace(GetHashCode(), arg0, arg1, arg2, arg3);
+
         private static readonly TimeSpan CancellationTimeout = TimeSpan.FromMicroseconds(250);
 
         /// <summary>
@@ -29,6 +68,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         protected AsyncCmdlet()
         {
+            Trace();
         }
 
         /// <summary>
@@ -48,6 +88,7 @@ namespace TTRider.PowerShellAsync
         /// </param>
         protected virtual void Dispose(bool disposing)
         {
+            Trace(disposing);
             if (disposing)
             {
                 _syncContext.Dispose();
@@ -64,7 +105,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         protected sealed override void BeginProcessing()
         {
-
+            Trace();
             this._syncContext.SendAsync(BeginProcessingAsync);
         }
 
@@ -74,6 +115,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         protected sealed override void ProcessRecord()
         {
+            Trace();
             this._syncContext.SendAsync(ProcessRecordAsync);
         }
 
@@ -83,6 +125,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         protected sealed override void EndProcessing()
         {
+            Trace();
             this._syncContext.SendAsync(EndProcessingAsync);
         }
 
@@ -94,6 +137,7 @@ namespace TTRider.PowerShellAsync
         protected sealed override void StopProcessing()
         {
             //this doesn't run from the pipeline thread.
+            Trace();
             this._syncContext.Send(StopProcessingAsync).Wait(CancellationTimeout);
             this._syncContext.Cancel();
         }
@@ -108,6 +152,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteDebug(string text)
         {
+            Trace(text);
             this._syncContext.Post(() => base.WriteDebug(text));
         }
 
@@ -117,6 +162,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteError(ErrorRecord errorRecord)
         {
+            Trace(errorRecord);
             this._syncContext.Post(() => base.WriteError(errorRecord));
         }
 
@@ -126,6 +172,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteObject(object sendToPipeline)
         {
+            Trace(sendToPipeline);
             this._syncContext.Post(() => base.WriteObject(sendToPipeline));
         }
 
@@ -135,6 +182,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteObject(object sendToPipeline, bool enumerateCollection)
         {
+            Trace(sendToPipeline, enumerateCollection);
             this._syncContext.Post(() => base.WriteObject(sendToPipeline, enumerateCollection));
         }
 
@@ -145,6 +193,7 @@ namespace TTRider.PowerShellAsync
         /// <param name="progressRecord">Progress information.</param>
         public new void WriteProgress(ProgressRecord progressRecord)
         {
+            Trace(progressRecord);
             this._syncContext.Post(() => base.WriteProgress(progressRecord));
         }
 
@@ -154,6 +203,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteVerbose(string text)
         {
+            Trace(text);
             this._syncContext.Post(() => base.WriteVerbose(text));
         }
 
@@ -163,6 +213,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteWarning(string text)
         {
+            Trace(text);
             this._syncContext.Post(() => base.WriteWarning(text));
         }
 
@@ -172,6 +223,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void WriteCommandDetail(string text)
         {
+            Trace(text);
             this._syncContext.Post(() => base.WriteCommandDetail(text));
         }
 
@@ -181,6 +233,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new void ThrowTerminatingError(ErrorRecord errorRecord)
         {
+            Trace(errorRecord);
             this._syncContext.Post(() => base.ThrowTerminatingError(errorRecord));
         }
 
@@ -194,6 +247,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new bool ShouldProcess(string target)
         {
+            Trace(target);
             return this._syncContext.Send(() => base.ShouldProcess(target));
         }
 
@@ -203,6 +257,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new bool ShouldProcess(string target, string action)
         {
+            Trace(target, action);
             return this._syncContext.Send(() => base.ShouldProcess(target, action));
         }
 
@@ -212,6 +267,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new bool ShouldProcess(string verboseDescription, string verboseWarning, string caption)
         {
+            Trace(verboseDescription, verboseWarning, caption);
             return this._syncContext.Send(() => base.ShouldProcess(verboseDescription, verboseWarning, caption));
         }
 
@@ -222,12 +278,14 @@ namespace TTRider.PowerShellAsync
         public new bool ShouldProcess(string verboseDescription, string verboseWarning, string caption,
             out ShouldProcessReason shouldProcessReason)
         {
+            Trace(verboseDescription, verboseWarning, caption);
             var result = this._syncContext.Send(() =>
             {
                 var result = base.ShouldProcess(verboseDescription, verboseWarning, caption, out var reason);
                 return (result, reason);
             });
             shouldProcessReason = result.reason;
+            Trace("result", result);
             return result.result;
         }
 
@@ -237,6 +295,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new bool ShouldContinue(string query, string caption)
         {
+            Trace(query, caption);
             return this._syncContext.Send(() => base.ShouldContinue(query, caption));
         }
 
@@ -246,6 +305,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new bool ShouldContinue(string query, string caption, ref bool yesToAll, ref bool noToAll)
         {
+            Trace(query, caption);
             var _yesToAll = yesToAll;
             var _noToAll = noToAll;
             var result = this._syncContext.Send(() =>
@@ -255,6 +315,7 @@ namespace TTRider.PowerShellAsync
             });
             yesToAll = result._yesToAll;
             noToAll = result._noToAll;
+            Trace("result", yesToAll, noToAll);
             return result.result;
         }
 
@@ -264,6 +325,7 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         public new bool TransactionAvailable()
         {
+            Trace();
             return this._syncContext.Send(() => base.TransactionAvailable());
         }
 
@@ -423,6 +485,13 @@ namespace TTRider.PowerShellAsync
         public sealed class ThreadAffinitiveSynchronizationContext
             : SynchronizationContext, IDisposable
         {
+            [Conditional("TRACE")]
+            private void Trace(
+                object? arg0 = default,
+                object? arg1 = default,
+                object? arg2 = default,
+                object? arg3 = default) =>
+                Debug.Trace(GetHashCode(), arg0, arg1, arg2, arg3);
 
             /// <summary>
             ///	The source for cancellation tokens that can be used to cancel the operation.
@@ -447,7 +516,9 @@ namespace TTRider.PowerShellAsync
             /// </summary>
             public ThreadAffinitiveSynchronizationContext()
             {
+                Trace();
             }
+
 
             /// <summary>
             ///	The current synchonization context for the thread.
@@ -473,6 +544,7 @@ namespace TTRider.PowerShellAsync
             /// </summary>
             public void Dispose()
             {
+                Trace();
                 StopMessagePump();
                 if (_cancellationTokenSource != null)
                 {
@@ -487,6 +559,7 @@ namespace TTRider.PowerShellAsync
             /// </summary>
             void CheckDisposed()
             {
+                Trace(_workItemQueue == null);
                 ObjectDisposedException.ThrowIf(_workItemQueue == null, GetType());
             }
 
@@ -496,12 +569,13 @@ namespace TTRider.PowerShellAsync
             /// </summary>
             void StartMessagePump()
             {
+                Trace();
                 ObjectDisposedException.ThrowIf(_workItemQueue != null, GetType());
 
                 lock (_workItemQueueLock)
                 {
-                    _workItemQueue = new();
-                }
+                _workItemQueue = new();
+            }
             }
 
 
@@ -510,13 +584,16 @@ namespace TTRider.PowerShellAsync
             /// </summary>
             void RunMessagePump(CancellationToken cancellationToken)
             {
+                Trace();
                 CheckDisposed();
 
                 while (!_workItemQueue!.IsCompleted && !cancellationToken.IsCancellationRequested)
                 {
+                    Trace("trytake");
                     while (_workItemQueue!.TryTake(out var workItem, Timeout.Infinite, cancellationToken))
                     {
                         var (callback, state) = workItem;
+                        Trace("take", callback);
                         callback?.Invoke(state);
 
                         // Has the synchronisation context been disposed?
@@ -524,6 +601,7 @@ namespace TTRider.PowerShellAsync
                             break;
                     }
                 }
+                Trace("completed", _workItemQueue!.IsCompleted, "cancelled", cancellationToken.IsCancellationRequested);
             }
 
 
@@ -532,6 +610,7 @@ namespace TTRider.PowerShellAsync
             /// </summary>
             void TerminateMessagePump()
             {
+                Trace();
                 CheckDisposed();
 
                 _workItemQueue!.CompleteAdding();
@@ -543,6 +622,7 @@ namespace TTRider.PowerShellAsync
             /// </summary>
             void StopMessagePump()
             {
+                Trace();
                 lock (_workItemQueueLock)
                 {
                     if (_workItemQueue != null)
@@ -564,12 +644,14 @@ namespace TTRider.PowerShellAsync
 
                 public MessagePumpScope(ThreadAffinitiveSynchronizationContext context)
                 {
+                    Debug.Trace(GetHashCode());
                     _savedContext = context;
                     _savedContext.StartMessagePump();
                 }
 
                 public void Dispose()
                 {
+                    Debug.Trace(GetHashCode());
                     _savedContext.StopMessagePump();
                 }
             }
@@ -586,18 +668,22 @@ namespace TTRider.PowerShellAsync
             /// </exception>
             public T Send<T>(Func<T> action)
             {
+                Trace(action);
                 TaskCompletionSource<T> tcs = new();
                 Post(_ =>
                 {
                     try
                     {
+                        Trace("run", action);
                         tcs.SetResult(action());
                     }
                     catch (Exception ex)
                     {
+                        Trace("exn", ex);
                         tcs.SetException(ex);
                     }
                 }, null);
+                Trace("completed", action);
                 return tcs.Task.Result;
             }
 
@@ -617,12 +703,18 @@ namespace TTRider.PowerShellAsync
                 {
                     Post(_ =>
                     {
+                        Trace("new task", action);
                         var task = action();
                         task.ContinueWith(t =>
                         {
+                            Trace("completed", action);
                             if (t.IsFaulted)
                             {
-                                Post(_ => throw t.Exception, null);
+                                Post(_ =>
+                                {
+                                    Trace("fault", t.Exception);
+                                    throw t.Exception;
+                                }, null);
                             }
                             TerminateMessagePump();
                         }, scheduler: TaskScheduler.Default);
@@ -641,6 +733,7 @@ namespace TTRider.PowerShellAsync
             /// </exception>
             public void Post(Action action)
             {
+                Trace(action);
                 Post(_ => action(), null);
             }
 
@@ -666,6 +759,7 @@ namespace TTRider.PowerShellAsync
                 {
                     using (new SynchronizationContextScope(this))
                     {
+                        Trace("reentrancy", callback);
                         callback!(callbackState);
                         return;
                     };
@@ -674,6 +768,7 @@ namespace TTRider.PowerShellAsync
                 // Send it to the Queue to be run in the proper thread.
                 try
                 {
+                    Trace("queue", callback);
                     _workItemQueue!.Add((callback, callbackState));
                 }
                 catch (Exception e) when (e is NullReferenceException || e is ObjectDisposedException)
@@ -696,6 +791,7 @@ namespace TTRider.PowerShellAsync
             /// <param name="timeout">Timeout the task has to run until it is cancelled.</param>
             private static void RunQueueSynchronized(TimeSpan? timeout = null)
             {
+                Debug.Trace(0, timeout);
                 ArgumentNullException.ThrowIfNull(Current);
                 var cancellationToken = Current.CancellationToken;
 
@@ -741,12 +837,14 @@ namespace TTRider.PowerShellAsync
 
             public SynchronizationContextScope(SynchronizationContext newContext)
             {
+                Debug.Trace(GetHashCode());
                 _savedContext = SynchronizationContext.Current;
                 SynchronizationContext.SetSynchronizationContext(newContext);
             }
 
             public void Dispose()
             {
+                Debug.Trace(GetHashCode());
                 SynchronizationContext.SetSynchronizationContext(_savedContext);
             }
         }
