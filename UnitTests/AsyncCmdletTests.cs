@@ -215,9 +215,9 @@ namespace TTRider.PowerShellAsync.UnitTests
                 var commandRuntime = this.CommandRuntime;
                 var events = this.Events;
                 ProviderInfo pi;
-                var psp = this.GetResolvedProviderPathFromPSPath(@"c:\", out pi);
+                var psp = this.GetResolvedProviderPathFromPSPath(@"/", out pi);
                 var pathInfo = this.CurrentProviderLocation(pi.Name);
-                var psp2 = this.GetUnresolvedProviderPathFromPSPath(@"c:\");
+                var psp2 = this.GetUnresolvedProviderPathFromPSPath(@"/");
                 var varErr = this.GetVariableValue("$error");
                 var varErr2 = this.GetVariableValue("$error", "default");
                 var host = this.Host;

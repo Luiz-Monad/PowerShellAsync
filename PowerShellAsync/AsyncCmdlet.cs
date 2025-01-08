@@ -64,7 +64,6 @@ namespace TTRider.PowerShellAsync
         /// </summary>
         protected sealed override void BeginProcessing()
         {
-
             this._syncContext.SendAsync(BeginProcessingAsync);
         }
 
