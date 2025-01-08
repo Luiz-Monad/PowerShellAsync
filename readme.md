@@ -47,7 +47,7 @@ please take a look at PowerShellAsyncExamples project, it contains an demo Cmdle
 # Contact
 
 
-[Vladimir (software@ttrider.com)](mailto:software@ttrider.com)
+[Luiz (luiz.monad@gmail.com)](mailto:luiz.monad@gmail.com)
 
 
 # License

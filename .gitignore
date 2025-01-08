@@ -48,6 +48,8 @@ Temporary Items
 /PowerShellAsync/obj/Debug
 /UnitTests/bin/Debug
 /UnitTests/obj/Debug
+/ConsoleTest/bin/Debug
+/ConsoleTest/obj/Debug
 *.suo
 /packages
 /MigrationBackup
@@ -72,3 +74,4 @@ bld/
 [Bb]in/
 [Oo]bj/
 [Ll]og/
+nuget/
