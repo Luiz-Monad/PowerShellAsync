@@ -676,7 +676,7 @@ namespace TTRider.PowerShellAsync
                 {
                     _workItemQueue!.Add((callback, callbackState));
                 }
-                catch (ObjectDisposedException)
+                catch (Exception e) when (e is NullReferenceException || e is ObjectDisposedException)
                 {
                     // queue was disposed because of cancellation.
                 }
