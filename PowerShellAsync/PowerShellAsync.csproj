@@ -2,24 +2,55 @@
 	<PropertyGroup>
 		<TargetFramework>net8.0</TargetFramework>
 		<OutputType>Library</OutputType>
-		<RootNamespace>TTRider.PowerShellAsync</RootNamespace>
-		<AssemblyName>TTRider.PowerShellAsync</AssemblyName>
+		<RootNamespace>MonadicSoftware.PowerShellAsync</RootNamespace>
+		<AssemblyName>MonadicSoftware.PowerShellAsync</AssemblyName>
 		<AssemblyTitle>PowerShellAsync</AssemblyTitle>
-		<Description>Base class for async-based cmdlets</Description>
-		<Company>TTRider, L.L.C.</Company>
+		<Description>Base class for async-supported PowerShell cmdlets.</Description>
+		<Company>MonadicSoftware</Company>
 		<Product>PowerShellAsync</Product>
-		<Copyright>Copyright TTRider, L.L.C.</Copyright>
+		<Copyright>Copyright (C) 2014 - 2020 TTRider, L.L.C.; 2024 - 2025 MonadicSoftware L.L.C.;</Copyright>
+		<Title>Base class for async-supported PowerShell cmdlets.</Title>
+		<Version>2.0.0</Version>
 		<AssemblyVersion>2.0.0.0</AssemblyVersion>
 		<FileVersion>2.0.0.0</FileVersion>
 		<Nullable>enable</Nullable>
 		<AnalysisLevel>latest</AnalysisLevel>
+		<PackageProjectUrl>https://github.com/Luiz-Monad/PowerShellAsync</PackageProjectUrl>
+		<PackageReadmeFile>readme.md</PackageReadmeFile>
+		<RepositoryUrl>https://github.com/Luiz-Monad/PowerShellAsync</RepositoryUrl>
+		<PackageReleaseNotes>
+2.0.0.0
+* upgraded synchonization context
+* .NET 8 Support
+* better tests
+1.1.0.1
+* Fixed CI workflow
+1.1.0.0
+* .NET Core 3.1 Support
+* Removed dependency on Jetbrains.Annoations
+1.0.1.0
+* Bug fixes
+1.0.0.0
+* Initial Release
+		</PackageReleaseNotes>
+		<PackageOutputPath>../nuget</PackageOutputPath>
+		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-	  <Optimize>True</Optimize>
+		<Optimize>True</Optimize>
 	</PropertyGroup>
 	<ItemGroup>
+		<None Include="../readme.md">
+			<Pack>True</Pack>
+			<PackagePath>/</PackagePath>
+		</None>
+		<None Include="../LICENSE">
+		  <Pack>True</Pack>
+		  <PackagePath>/</PackagePath>
+		</None>
+	</ItemGroup>
+	<ItemGroup>
 		<PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-		<PackageReference Include="Nito.AsyncEx.Context" Version="5.1.2" />
 		<PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
 		<PackageReference Include="System.Management.Automation" Version="7.4.6" />
 	</ItemGroup>
