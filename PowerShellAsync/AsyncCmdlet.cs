@@ -417,7 +417,7 @@ namespace TTRider.PowerShellAsync
         ///	A synchronisation context that runs all calls scheduled on it (via <see cref="SynchronizationContext.Post"/>) on a single thread.
         /// </summary>
         /// <remarks>
-        ///	With thanks to Stephen Toub.
+        ///	Reimplementation by Luiz-Monad inspired by https://github.com/Stroniax/PSSharp.PowerShell.Async
         /// </remarks>
         public sealed class ThreadAffinitiveSynchronizationContext
             : SynchronizationContext, IDisposable
@@ -557,7 +557,7 @@ namespace TTRider.PowerShellAsync
             /// <summary>
             ///	Allow using clause with the message pump start/stop.
             /// </summary>
-            public sealed class MessagePumpScope : IDisposable
+            internal sealed class MessagePumpScope : IDisposable
             {
                 private readonly ThreadAffinitiveSynchronizationContext _savedContext;
 
@@ -578,7 +578,6 @@ namespace TTRider.PowerShellAsync
             /// Synchronously executes a delegate on this synchronization context and returns its result.
             /// </summary>
             /// <typeparam name="T">The type of the result.</typeparam>
-            /// <param name="this">The synchronization context.</param>
             /// <param name="action">The delegate to execute.</param>
             /// <exception cref="InvalidOperationException">
             /// The message pump has already been started, and then terminated by calling <see cref="TerminateMessagePump"/>.
@@ -601,7 +600,7 @@ namespace TTRider.PowerShellAsync
             }
 
 
-            // <summary>
+            /// <summary>
             /// Synchronously executes a Task on this synchronization context and waits for it to finish.
             /// </summary>
             /// <param name="action">The task to execute.</param>
@@ -734,7 +733,7 @@ namespace TTRider.PowerShellAsync
         /// <summary>
         ///	Allow using clause with a synchronisation context (<see cref="SynchronizationContext"/>).
         /// </summary>
-        public sealed class SynchronizationContextScope : IDisposable
+        internal sealed class SynchronizationContextScope : IDisposable
         {
             private readonly SynchronizationContext? _savedContext;
 

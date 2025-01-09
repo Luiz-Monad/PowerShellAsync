@@ -19,22 +19,28 @@
 		<PackageReadmeFile>readme.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/Luiz-Monad/PowerShellAsync</RepositoryUrl>
 		<PackageReleaseNotes>
-2.0.0.0
-* upgraded synchonization context
-* .NET 8 Support
-* better tests
-1.1.0.1
-* Fixed CI workflow
-1.1.0.0
-* .NET Core 3.1 Support
-* Removed dependency on Jetbrains.Annoations
-1.0.1.0
-* Bug fixes
-1.0.0.0
-* Initial Release
+			2.0.0.0
+			* upgraded synchonization context
+			* .NET 8 Support
+			* better tests
+			1.1.0.1
+			* Fixed CI workflow
+			1.1.0.0
+			* .NET Core 3.1 Support
+			* Removed dependency on Jetbrains.Annoations
+			1.0.1.0
+			* Bug fixes
+			1.0.0.0
+			* Initial Release
 		</PackageReleaseNotes>
 		<PackageOutputPath>../nuget</PackageOutputPath>
 		<PackageLicenseFile>LICENSE</PackageLicenseFile>
+		<PackageTags>PowerShell; Async</PackageTags>
+		<IncludeSymbols>True</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<PackageIcon>logo.png</PackageIcon>
+		<Authors>MonadicSoftware</Authors>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
 		<Optimize>True</Optimize>
@@ -45,8 +51,12 @@
 			<PackagePath>/</PackagePath>
 		</None>
 		<None Include="../LICENSE">
-		  <Pack>True</Pack>
-		  <PackagePath>/</PackagePath>
+			<Pack>True</Pack>
+			<PackagePath>/</PackagePath>
+		</None>
+		<None Include="../logo.png">
+			<Pack>True</Pack>
+			<PackagePath>/</PackagePath>
 		</None>
 	</ItemGroup>
 	<ItemGroup>
