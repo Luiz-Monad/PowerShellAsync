@@ -4,9 +4,10 @@
 # based on code changes.
 
 # The pull request updates the version in ButterCMS/ButterCMS.csproj, 
-# updates the version in README.md, updates the changelog and creates release tags.
+# updates the version in readme.md, updates the changelog and creates release tags.
 
 # For more information, see https://github.com/marketplace/actions/release-please-action
+# Specs for the commit messages: https://www.conventionalcommits.org/en/v1.0.0/
 
 name: Release Please
 on:
@@ -29,5 +30,4 @@ jobs:
           pull-request-title-pattern: 'chore(release): ${version}'
           pull-request-header: ':robot: Merge this PR to release a new version'
           extra-files: |
-            README.md
             PowerShellAsync/PowerShellAsync.csproj
