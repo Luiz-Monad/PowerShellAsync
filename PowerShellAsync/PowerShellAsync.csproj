@@ -10,9 +10,9 @@
 		<Product>PowerShellAsync</Product>
 		<Copyright>Copyright (C) 2014 - 2020 TTRider, L.L.C.; 2024 - 2025 MonadicSoftware L.L.C.;</Copyright>
 		<Title>Base class for async-supported PowerShell cmdlets.</Title>
-		<Version>1.0.0</Version> <!-- {x-release-please-version} -->
-		<AssemblyVersion>1.0.0</AssemblyVersion> <!-- {x-release-please-version} -->
-		<FileVersion>1.0.0</FileVersion> <!-- {x-release-please-version} -->
+		<Version>2.0.0</Version> <!-- {x-release-please-version} -->
+		<AssemblyVersion>2.0.0</AssemblyVersion> <!-- {x-release-please-version} -->
+		<FileVersion>2.0.0</FileVersion> <!-- {x-release-please-version} -->
 		<Nullable>enable</Nullable>
 		<AnalysisLevel>latest</AnalysisLevel>
 		<PackageProjectUrl>https://github.com/Luiz-Monad/PowerShellAsync</PackageProjectUrl>
