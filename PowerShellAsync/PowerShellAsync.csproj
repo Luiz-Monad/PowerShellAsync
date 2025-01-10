@@ -10,29 +10,14 @@
 		<Product>PowerShellAsync</Product>
 		<Copyright>Copyright (C) 2014 - 2020 TTRider, L.L.C.; 2024 - 2025 MonadicSoftware L.L.C.;</Copyright>
 		<Title>Base class for async-supported PowerShell cmdlets.</Title>
-		<Version>2.0.0</Version>
-		<AssemblyVersion>2.0.0.0</AssemblyVersion>
-		<FileVersion>2.0.0.0</FileVersion>
+		<Version>1.0.0</Version> <!-- {x-release-please-version} -->
+		<AssemblyVersion>1.0.0</AssemblyVersion> <!-- {x-release-please-version} -->
+		<FileVersion>1.0.0</FileVersion> <!-- {x-release-please-version} -->
 		<Nullable>enable</Nullable>
 		<AnalysisLevel>latest</AnalysisLevel>
 		<PackageProjectUrl>https://github.com/Luiz-Monad/PowerShellAsync</PackageProjectUrl>
 		<PackageReadmeFile>readme.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/Luiz-Monad/PowerShellAsync</RepositoryUrl>
-		<PackageReleaseNotes>
-			2.0.0.0
-			* upgraded synchonization context
-			* .NET 8 Support
-			* better tests
-			1.1.0.1
-			* Fixed CI workflow
-			1.1.0.0
-			* .NET Core 3.1 Support
-			* Removed dependency on Jetbrains.Annoations
-			1.0.1.0
-			* Bug fixes
-			1.0.0.0
-			* Initial Release
-		</PackageReleaseNotes>
 		<PackageOutputPath>../nuget</PackageOutputPath>
 		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 		<PackageTags>PowerShell; Async</PackageTags>
