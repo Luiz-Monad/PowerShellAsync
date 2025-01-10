@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Testing
+on: 
+  workflow_call:
+
+jobs:
+  build-and-test:
+    uses: ./.github/workflows/build.yml

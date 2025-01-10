@@ -39,7 +39,7 @@
 		<IncludeSymbols>True</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 		<PackageIcon>logo.png</PackageIcon>
-		<Authors>MonadicSoftware</Authors>
+		<Authors>LuizStangarlin; MonadicSoftware</Authors>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
