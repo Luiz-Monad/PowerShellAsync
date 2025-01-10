@@ -3,10 +3,6 @@ name: Build and Test
 on:
   workflow_call:     # Allow other workflows to use it
   workflow_dispatch: # Allow running the workflow manually from the GitHub UI
-  push:
-    branches: [ master ]
-  pull_request:
-    types: [opened]
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1

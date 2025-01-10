@@ -19,12 +19,8 @@ permissions:
   pull-requests: write
 
 jobs:
-  testing:
-    uses: ./.github/workflows/test.yml
-
   release-please:
-    runs-on: ubuntu-22.04
-    needs: testing
+    runs-on: ubuntu-latest
     steps:
       - uses: google-github-actions/release-please-action@v3.7.10
         with:
