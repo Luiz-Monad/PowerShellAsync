@@ -33,6 +33,13 @@
 * publish nuget package ([e3bdab3](https://github.com/Luiz-Monad/PowerShellAsync/commit/e3bdab30bcafd29d3f845b7fbc35c07ba7a6b413))
 * upgrade project to dotnet8 ([2fd31f4](https://github.com/Luiz-Monad/PowerShellAsync/commit/2fd31f4d868ae5726bada6fdf3a5f638e3400851))
 
+## [2.0.0](https://github.com/Luiz-Monad/PowerShellAsync/compare/v1.0.0...v2.0.0) (2025-01-10)
+
+
+### Miscellaneous Chores
+
+* release 2.0.0 ([202f855](https://github.com/Luiz-Monad/PowerShellAsync/commit/202f8556a6be31fcae874d82f83b7e1960d3f8f9))
+
 ## 0.0.0 legacy (2022-08-13)
 
 
