@@ -1,4 +1,4 @@
-![.NET Core](https://github.com/ttrider/PowerShellAsync/workflows/.NET%20Core/badge.svg?branch=master)
+![.NET Core](https://github.com/Luiz-Monad/PowerShellAsync/workflows/nuget-publish/badge.svg?branch=master)
 
 # PowerShellAsync
 base class for async-enabled PowerShell Cmdlets.

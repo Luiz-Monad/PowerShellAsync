@@ -34,8 +34,10 @@ jobs:
       uses: actions/setup-dotnet@v4
 
     # Edit commit
-    - name: Update git commit id
-      run:  ./.github/workflows/set-repository_commit.ps1 -commitHash "${{ github.sha }}" -csProjPath "PowerShellAsync/PowerShellAsync.csproj"
+    - name: Update git commit id and release notes
+      run: |
+        ./.github/workflows/set-csproj-prop.ps1 -key "RepositoryCommit" -value "${{ github.sha }}" -csProjPath "PowerShellAsync/PowerShellAsync.csproj"
+        ./.github/workflows/set-csproj-prop.ps1 -key "PackageReleaseNotes" -value (Get-Content "./CHANGELOG.md") -csProjPath "PowerShellAsync/PowerShellAsync.csproj"      
 
     # Restore nuget packages only once
     - name: Restore
